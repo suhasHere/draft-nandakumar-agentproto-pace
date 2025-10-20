@@ -27,13 +27,13 @@ venue:
 
 author:
  -
-    name: "Cullen Jennings"
-    organization: "Cisco Systems"
-    email: "fluffy@cisco.com"
- -
     name: "Suhas Nandakumar"
     organization: "Cisco"
     email: "snandaku@cisco.com"
+ -
+    name: "Cullen Jennings"
+    organization: "Cisco Systems"
+    email: "fluffy@cisco.com"
 
 normative:
   RFC2119:
