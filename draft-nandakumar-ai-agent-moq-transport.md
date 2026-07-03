@@ -118,6 +118,15 @@ informative:
     seriesinfo:
       Internet-Draft: draft-mcp-over-moqt
     target: https://datatracker.ietf.org/doc/draft-mcp-over-moqt/
+  SD-AGENT:
+    title: "SD Agent: Selective Disclosure for Agent Discovery and Identity Management"
+    date: 2026-02
+    author:
+    - ins: S. Nandakumar
+    - ins: C. Jennings
+    seriesinfo:
+      Internet-Draft: draft-nandakumar-agent-sd-jwt-02
+    target: https://datatracker.ietf.org/doc/draft-nandakumar-agent-sd-jwt/
 
 --- abstract
 
@@ -552,6 +561,9 @@ Agent Identity Token Structure:
 {: #figure-identity-token title="Agent Identity Token Structure"}
 
 The token format is based on JWT {{RFC7519}} with agent-specific claims.
+Agents MAY use the SD-JWT based identity mechanism defined in
+{{SD-AGENT}} to support selective disclosure of identity attributes
+during session establishment.
 
 ### Delegation Chains
 
@@ -617,7 +629,10 @@ Agent A                     MOQT Relay                     Agent B
 
 Each agent publishes a capability card as an MOQT object on its
 discovery track. The card advertises the agent's identity, capabilities,
-supported modalities, and connection parameters:
+supported modalities, and connection parameters. Agent cards MAY use
+the selective disclosure mechanism defined in {{SD-AGENT}} to enable
+privacy-preserving discovery where agents reveal only the claims
+necessary for a given interaction:
 
 ~~~json
 {
