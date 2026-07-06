@@ -3,7 +3,7 @@ title: "PACE: Protocol for Agent Communication Exchange"
 abbrev: "PACE over MOQT"
 category: std
 
-docname: draft-nandakumar-ai-agent-moq-transport-latest
+docname: draft-nandakumar-agentproto-moq-pace-latest
 submissiontype: IETF
 number:
 date: 2026-06-28
@@ -178,21 +178,40 @@ The PACE architecture layers as follows:
 ~~~
 {: #figure-arch title="PACE Architecture"}
 
-## MOQT as Session Substrate
+## Why MOQT?
 
 Media over QUIC Transport (MOQT) {{MoQ-TRANSPORT}} is a publish/subscribe
-protocol over QUIC providing:
+protocol over QUIC. PACE adopts MOQT as its transport substrate for the
+following reasons:
 
-* **Hierarchical Namespaces**: Content addressed by namespace tuples,
-  enabling prefix-based routing and caching
-* **Relay Fan-Out**: Publishers connect once; relays distribute to all
-  subscribers without direct peer connections
-* **Low Latency**: QUIC 0-RTT, stream multiplexing, priority (0-255)
-* **Fault Tolerance**: Relay caching enables recovery from disconnections
-
-Agents connect to MOQT relays which handle subscription matching,
-fan-out, and object caching. Relays MAY be organized hierarchically
-for geographic locality.
+* **Native pub/sub** — Agents publish and subscribe without polling or
+  long-lived HTTP connections; the relay handles fan-out
+* **Prefix-based routing** — SUBSCRIBE_TRACKS on an agent's prefix
+  automatically delivers all current and future tracks, enabling session
+  notification without dedicated signaling channels
+* **Relay architecture** — No direct peer-to-peer connections required;
+  relays provide NAT traversal and load balancing out of the box
+* **Multi-party fan-out** — A single PUBLISH reaches all subscribers via
+  relay; no application-level broadcast logic needed for multi-agent
+  collaboration
+* **Relay caching** — Late-joining agents receive cached objects, enabling
+  session recovery and mid-conversation catch-up without peer
+  retransmission
+* **Per-object priority** — Real-time audio/video, control messages, and
+  bulk transfers coexist on the same session with differentiated QoS
+  (0-255 priority scale)
+* **Multiple latency spectrums** — A single MOQT session supports
+  sub-100ms real-time media, sub-second interactive messaging, and
+  best-effort bulk transfers simultaneously, matching the diverse
+  communication needs of AI agents
+* **Scalability** — Relays MAY be organized hierarchically for geographic
+  distribution, enabling thousands of agents across regions without
+  requiring each agent to maintain direct connections to all peers
+* **QUIC foundation** — Connection migration (WiFi to cellular),
+  multiplexed streams, 0-RTT resumption, and mandatory TLS 1.3
+* **Namespace-level access control** — Maps directly to agent
+  authorization scopes; relays enforce who can publish/subscribe to
+  which namespaces
 
 # MOQT Mapping {#moqt-mapping}
 

@@ -1,4 +1,4 @@
-DRAFT = draft-nandakumar-ai-agent-moq-transport.md
+DRAFT = draft-nandakumar-agentproto-moq-pace.md
 LIBDIR := ../moq-transport/lib
 include $(LIBDIR)/main.mk
 

@@ -1,0 +1,3880 @@
+<!DOCTYPE html>
+<html lang="en" class="Internet-Draft">
+<head>
+<meta charset="utf-8">
+<meta content="Common,Latin" name="scripts">
+<meta content="initial-scale=1.0" name="viewport">
+<title>PACE: Protocol for Agent Communication Exchange</title>
+<meta content="Suhas Nandakumar" name="author">
+<meta content="Cullen Jennings" name="author">
+<meta content="
+       This document defines the Protocol for Agent Communication Exchange (PACE),
+a session protocol for AI agent communication over Media over QUIC Transport
+(MOQT). PACE provides session lifecycle management, multi-modal data
+exchange, agent identity verification, and delegated authorization within
+MOQT's publish/subscribe model, supporting point-to-point and
+point-to-multipoint topologies through relay infrastructure. 
+    " name="description">
+<meta content="xml2rfc 3.31.0" name="generator">
+<meta content="agent-to-agent" name="keyword">
+<meta content="agent-to-tool" name="keyword">
+<meta content="MOQT" name="keyword">
+<meta content="AI agents" name="keyword">
+<meta content="session protocol" name="keyword">
+<meta content="real-time communication" name="keyword">
+<meta content="draft-nandakumar-agentproto-moq-pace-latest" name="ietf.draft">
+<!-- Generator version information:
+  xml2rfc 3.31.0
+    Python 3.14.2
+    ConfigArgParse 1.7.1
+    google-i18n-address 3.1.1
+    intervaltree 3.2.1
+    Jinja2 3.1.6
+    lxml 6.0.2
+    platformdirs 4.9.2
+    pycountry 26.2.16
+    PyYAML 6.0.3
+    requests 2.32.5
+    wcwidth 0.6.0
+-->
+<link href="draft-nandakumar-agentproto-moq-pace.xml" rel="alternate" type="application/rfc+xml">
+<link href="#copyright" rel="license">
+<style type="text/css">@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-cyrillic.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-cyrillic.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: local('Lora SemiBold'), local('Lora-SemiBold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-semibold-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Oxygen Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Oxygen Mono'), local('OxygenMono-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/oxygenmono-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Oxygen Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Oxygen Mono'), local('OxygenMono-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/oxygenmono-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+}
+
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: light dark;
+  --background-color: #fff;
+  --text-color: #222;
+  --title-color: #191919;
+  --link-color: #2a6496;
+  --highlight-color: #f9f9f9;
+  --line-color: #eee;
+  --pilcrow-weak: #ddd;
+  --pilcrow-strong: #bbb;
+  --small-font-size: 14.5px;
+  --font-mono: 'Oxygen Mono', monospace;
+  --font-title: "Sofia Sans Semi Condensed", sans-serif;
+  scrollbar-color: #bbb #eee;
+}
+body {
+  max-width: 600px;
+  margin: 75px auto;
+  padding: 0 5px;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  font: 16px/22px "Lora", serif;
+  scroll-behavior: smooth;
+}
+
+.ears {
+  display: none;
+}
+
+/* headings */
+section {
+  clear: both;
+}
+.section-number {
+  padding-right: 0.5em;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-title);
+  font-weight: 680;
+  margin: 0.8em 0 0.3em;
+  font-size-adjust: 0.5;
+  color: var(--title-color);
+}
+h1#title {
+  font-size: 32px;
+  line-height: 40px;
+  clear: both;
+}
+h1#title, h1#rfcnum {
+  margin: 1.5em 0 0.2em;
+}
+h1#rfcnum + h1#title {
+  margin: 0.2em 0;
+}
+
+h1, h2, h3 {
+  font-size: 22px;
+  line-height: 27px;
+}
+h4, h5, h6 {
+  font-size: 20px;
+  line-height: 24px;
+}
+
+/* general structure */
+.author {
+  padding-bottom: 0.3em;
+  vertical-align: top;
+}
+#abstract+p {
+  font-size: 18px;
+  line-height: 24px;
+}
+#abstract+p code, #abstract+p samp, #abstract+p tt {
+  font-size: 16px;
+  line-height: 0;
+}
+
+p {
+  padding: 0;
+  margin: 0.5em 0;
+  text-align: left;
+}
+div {
+  margin: 0;
+}
+.alignRight.art-text {
+  background-color: var(--highlight-color);
+  border: 1px solid var(--line-color);
+  border-radius: 3px;
+  padding: 0.5em 1em 0;
+  margin-bottom: 0.5em;
+}
+.alignRight.art-text pre {
+  padding: 0;
+  width: auto;
+}
+.alignRight {
+  margin: 1em 0;
+}
+.alignRight > *:first-child {
+  border: none;
+  margin: 0;
+  float: right;
+  clear: both;
+}
+.alignRight > *:nth-child(2) {
+  clear: both;
+  display: block;
+  border: none;
+}
+svg {
+  display: block;
+}
+/* font-family isn't space-separated, but =~ will have to do */
+svg[font-family~="monospace" i], svg [font-family~="monospace" i] {
+  font-family: var(--font-mono);
+}
+.alignCenter.art-text {
+  background-color: var(--highlight-color);
+  border: 1px solid var(--line-color);
+  border-radius: 3px;
+  padding: 0.5em 1em 0;
+  margin-bottom: 0.5em;
+}
+.alignCenter.art-text pre {
+  padding: 0;
+  width: auto;
+}
+.alignCenter {
+  margin: 1em 0;
+}
+.alignCenter > *:first-child {
+  border: none;
+  /* this isn't optimal, but it's an existence proof.  PrinceXML doesn't
+     support flexbox yet.
+  */
+  display: table;
+  margin: 0 auto;
+}
+
+/* lists */
+ol, ul {
+  padding: 0;
+  margin: 0 0 0.5em 2em;
+  & :is(ol, ul) {
+    margin-left: 1em;
+  }
+}
+li {
+  margin: 0 0 0.25em 0;
+}
+ul.empty, .ulEmpty {
+  list-style-type: none;
+  & li {
+    margin-top: 0.5em;
+  }
+}
+:is(ul, ol).compact, .ulCompact, .olCompact {
+  margin: 0 0 0 2em;
+  & li {
+    margin: 0;
+    & :first-child { margin-top: 0; }
+    & :last-child { margin-bottom: 0; }
+  }
+}
+
+/* definition lists */
+dl {
+  clear: left;
+  --indent: 3ch;
+  /* --indent: attr(indent ch); not supported in any browser, but we can dream */
+  &.olPercent {
+    --indent: 5ch;
+    & > dt {
+      min-width: calc(var(--indent) - 2ch);
+    }
+  }
+  &.olPercent > dt {
+    float: none;
+  }
+
+  dl > dd > & {
+    margin-top: 0.5em;
+    margin-bottom: 0;
+  }
+}
+dl:not(.dlNewline) > dt {
+  float: left;
+  margin-right: 2ch;
+  min-width: 8ch;
+}
+dl > dd {
+  margin-bottom: .8em;
+  margin-left: var(--indent) !important; /* stupid element overrides */
+  min-height: 2ex;
+}
+:is(dl.compact, .dlCompact) > dd {
+  margin-bottom: 0;
+  & > :is(:first-child, .break:first-child + *) {
+    margin-top: 0;
+  }
+  & > :is(:last-child) {
+    margin-bottom: 0;
+  }
+}
+:is(dd, span).break {
+  display: none;
+}
+
+/* links */
+a, a[href].selfRef:hover {
+  text-decoration: none;
+}
+a[href] {
+  color: var(--link-color);
+}
+a[href].selfRef, .iref + a[href].internal {
+  color: var(--text-color);
+}
+a[href]:hover {
+  text-decoration: underline;
+}
+a[href].selfRef:hover {
+  background-color: var(--highlight-color);
+}
+a.xref:is(.cite, .auto), :is(#status-of-memo, #copyright) a {
+  white-space: nowrap;
+}
+
+/* Figures */
+tt, code, pre {
+  background-color: var(--highlight-color);
+  font: 14px/22px var(--font-mono);
+}
+tt, code {
+  /* changing the font for inline elements leads to different ascender
+     and descender heights; as we want to retain baseline alignment,
+     remove leading to avoid altering the final height of lines
+     note: this fails if these blocks take an entire line,
+     a different solution would be great */
+  line-height: 0;
+}
+:is(h1, h2, h3, h4, h5, h6) :is(tt, code) {
+  font-size: 84%;
+}
+pre {
+  border: 1px solid var(--line-color);
+  font-size: 13.5px;
+  line-height: 16px;
+  letter-spacing: -0.2px;
+  margin: 5px;
+  padding: 5px;
+}
+img {
+  max-width: 100%;
+}
+figure {
+  margin: 0.5em 0;
+  padding: 0;
+}
+figure blockquote {
+  margin: 0.8em 0.4em 0.4em;
+}
+figcaption, caption {
+  font-style: italic;
+  margin: 0.5em 1.5em;
+  text-align: left;
+  caption-side: bottom;
+}
+@media screen {
+  /* Auto-collapse boilerplate. */
+  :is(#status-of-memo, #copyright) p {
+    margin: -2px 0;
+    max-height: 0;
+    transition: max-height 2s ease, margin 0.5s ease 0.5s;
+    overflow: hidden;
+  }
+  :is(#status-of-memo, #copyright):hover p,
+  :is(#status-of-memo, #copyright) h2:target ~ p {
+    margin: 0.5em 0;
+    max-height: 500px;
+    overflow: auto;
+  }
+  pre, svg {
+    display: inline-block;
+    /* In the horizontal direction, sometimes people make over-sized figures.
+       Scrollbars for those is therefore necessary: auto adds them as necessary..
+       In the vertical direction, the line-height can combine with the font
+       asender/descender height to produce scrollbars: hidden avoids that. */
+    overflow: auto hidden;
+  }
+  pre {
+    max-width: 100%;
+    width: calc(100% - 22px - 1em);
+  }
+  svg {
+    max-width: calc(100% - 22px - 1em);
+  }
+  figure pre {
+    display: block;
+    width: calc(100% - 25px);
+  }
+  :is(pre, svg) + .pilcrow {
+    display: inline-block;
+    vertical-align: text-bottom;
+    padding-bottom: 8px;
+  }
+}
+
+/* aside, blockquote */
+aside, blockquote {
+  margin-left: 0;
+  padding: 0 2em;
+  font-style: italic;
+}
+blockquote {
+  margin: 1em 0;
+  border-left: 2px var(--pilcrow-strong) solid;
+}
+cite {
+  display: block;
+  text-align: right;
+  font-style: italic;
+}
+
+/* tables */
+table {
+  width: auto;
+  max-width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+}
+table.right {
+  margin-left: auto;
+}
+table.center {
+  margin-left: auto;
+  margin-right: auto;
+}
+table.left {
+  margin-right: auto;
+}
+table .text-left {
+  text-align: left;
+}
+table .text-center {
+  text-align: center;
+}
+table .text-right {
+  text-align: right;
+}
+
+thead, tbody {
+  border: 1px solid var(--line-color);
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 5px 10px;
+}
+th {
+  background-color: var(--line-color);
+}
+:is(tr:nth-child(2n), thead+tbody > tr:nth-child(2n+1)) > td {
+  background-color: var(--background-color);
+}
+:is(tr:nth-child(2n+1), thead+tbody > tr:nth-child(2n)) > td {
+  background-color: var(--highlight-color);
+}
+table caption {
+  margin: 0;
+  padding: 3px 0 3px 1em;
+}
+table p {
+  margin: 0;
+}
+
+/* pilcrow */
+a.pilcrow {
+  margin-left: 3px;
+  opacity: 0.2;
+  user-select: none;
+  &[href] {
+    color: var(--pilcrow-weak);
+    &:hover { text-decoration: none; }
+  }
+}
+@media not print {
+  :hover > a.pilcrow, a.pilcrow:focus {
+    opacity: 1;
+  }
+  a.pilcrow[href]:hover {
+    color: var(--pilcrow-strong);
+    background-color: transparent;
+  }
+}
+@media print {
+  a.pilcrow {
+    display: none;
+  }
+}
+
+/* misc */
+hr {
+  border: 0;
+  border-top: 1px solid var(--line-color);
+}
+.bcp14 {
+  font-variant: small-caps;
+  font-weight: 600;
+  font-size: var(--small-font-size);
+}
+.role {
+  font-variant: all-small-caps;
+}
+sub, sup {
+  line-height: 1;
+  font-size: 80%;
+}
+
+/* info block */
+#identifiers {
+  margin: 0;
+  font-size: var(--small-font-size);
+  line-height: 18px;
+  --identifier-width: 15ch;
+  & dt {
+    width: var(--identifier-width);
+    min-width: var(--identifier-width);
+    clear: left;
+    float: left;
+    text-align: right;
+    margin-right: 1ch;
+  }
+  & dd {
+    margin: 0;
+    margin-left: calc(1em + var(--identifier-width)) !important;
+    min-width: 5em;
+  }
+  & .authors {
+    & .author {
+      display: inline-block;
+      margin-right: 1.5em;
+    }
+    & .org {
+      font-style: italic;
+    }
+  }
+}
+
+/* The prepared/rendered info at the very bottom of the page */
+.docInfo {
+  color: #999;
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2em;
+}
+.docInfo .prepared {
+  float: right;
+}
+
+/* table of contents */
+#toc {
+  padding: 0.75em 0 2em 0;
+  margin-bottom: 1em;
+
+  & nav {
+    & ul {
+      margin: 0 0.5em 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    & li {
+      line-height: 1.3em;
+      margin: 2px 0;
+      padding-left: 1.2em;
+      text-indent: -1.2em;
+    }
+  }
+  & a.xref {
+    white-space: normal;
+  }
+}
+
+.references {
+  & > dt {
+    text-align: right;
+    font-weight: bold;
+    min-width: 10ch;
+    margin-right: 1.5ch;
+    &:target::before {
+      content: "⇒";
+      margin: 0 10px 0 -25px;
+    }
+  }
+  & > dd {
+    margin-left: 12ch !important;
+    overflow: visible;
+    & .refInstance {
+      margin-bottom: 0.8em;
+    }
+    & .ascii {
+      margin-bottom: 0.25em;
+    }
+  }
+}
+
+#rfc\.index\.index + ul {
+  margin-left: 0;
+}
+
+/* authors */
+address.vcard {
+  font-style: normal;
+  max-width: 20em;
+  margin: 1em auto 1em 0;
+
+  & .nameRole {
+    font-weight: 700;
+    margin-left: 0;
+  }
+  & .label {
+    margin: 0.5em 0;
+  }
+  & .type {
+    display: none;
+  }
+  & .alternative-contact {
+    margin: 0.5em 0 0.25em 0;
+  }
+  & .non-ascii {
+    margin: 0 0 0 2em;
+  }
+  & div.left {
+    text-align: left;
+  }
+  & div.right {
+    text-align: right;
+  }
+}
+
+hr.addr {
+  border-top: 1px dashed;
+  margin: 0;
+  color: #ddd;
+  max-width: calc(100% - 16px);
+}
+@media (min-width: 500px) {
+  #authors-addresses > section {
+    column-count: 2;
+    column-gap: 20px;
+  }
+  #authors-addresses > section > h2 {
+    column-span: all;
+  }
+  /* hack for break-inside: avoid-column */
+  #authors-addresses address {
+    display: inline-block;
+    break-inside: avoid-column;
+  }
+}
+
+/* Comments */
+.rfcEditorRemove p:first-of-type {
+  font-style: italic;
+}
+.cref {
+  background-color: rgba(249, 232, 105, 0.3);
+  padding: 2px 4px;
+}
+.crefSource {
+  font-style: italic;
+}
+
+@media screen {
+  #toc nav {
+    font-family: var(--font-title);
+    font-weight: 360;
+    & > ul { margin-bottom: 2em; }
+    & ul {
+      margin: 0 0 0 4px;
+      & :is(p, li) {
+        margin: 2px 0;
+      }
+    }
+  }
+  #toc a.toplink {
+    float: right;
+  }
+}
+@media not screen {
+  #toc a.toplink {
+    display: none;
+  }
+}
+
+
+/* TOC layout for smaller screens */
+@media screen and (max-width: 929px) {
+  #toc {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    padding: 1px 0 0 0;
+    margin: 0;
+    border-bottom: 1px solid #ccc;
+    opacity: 0.6;
+  }
+  #toc h2 {
+    margin: 0;
+    padding: 2px 0 2px 6px;
+    padding-right: 1em;
+    font-size: 18px;
+    line-height: 24px;
+    min-width: 190px;
+    text-align: right;
+    background-color: #444;
+    color: white;
+    cursor: pointer;
+    &::before { /* css hamburger */
+      float: right;
+      position: relative;
+      width: 1em;
+      height: 1px;
+      left: -164px;
+      margin: 8px 0 0 0;
+      background: white none repeat scroll 0 0;
+      box-shadow: 0 4px 0 0 white, 0 8px 0 0 white;
+      content: "";
+    }
+  }
+  #toc nav {
+    display: none;
+    background-color: var(--background-color);
+    padding: 0.5em 1em 1em;
+    overflow: auto;
+    overscroll-behavior: contain;
+    height: calc(100vh - 48px);
+    border-left: 1px solid #ddd;
+  }
+  #toc.active {
+    opacity: 1;
+    & nav { display: block; }
+  }
+  /* Make the collapsed ToC header render white on gray also when it's a link */
+  #toc h2 a,
+  #toc h2 a:is(:link, :focus, :hover),
+  #toc a.toplink,
+  #toc a.toplink:hover {
+    color: white;
+    background-color: #444;
+    text-decoration: none;
+  }
+  #toc a.toplink {
+    margin: 2px 0.5em 0;
+  }
+}
+
+/* TOC layout for wide screens */
+@media screen and (min-width: 930px) {
+  body {
+    padding-right: 360px;
+    padding-right: calc(min(180px + 20%, 500px));
+  }
+  #toc {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    right: calc(50vw - 480px);
+    width: 312px;
+    margin: 0;
+    padding: 0;
+    z-index: 1;
+  }
+  #toc h2 {
+    margin: 0;
+    padding: 0.25em 1em 1em 0;
+  }
+  #toc nav {
+    display: block;
+    height: calc(90vh - 84px);
+    bottom: 0;
+    padding: 0.5em 0 2em;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  img { /* future proofing */
+    max-width: 100%;
+    height: auto;
+  }
+  #toc a.toplink {
+    margin: 8px 0.5em 0;
+  }
+}
+
+/* pagination */
+@media print {
+  body {
+    width: 100%;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+  #n-copyright-notice {
+    border-bottom: none;
+  }
+  #toc, #n-introduction {
+    page-break-before: always;
+  }
+  #toc {
+    border-top: none;
+    padding-top: 0;
+  }
+  figure, pre, .vcard {
+    page-break-inside: avoid;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  :is(h2, h3, h4, h5, h6)+*, dd {
+    page-break-before: avoid;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 10pt;
+  }
+  table {
+    border: 1px solid #ddd;
+  }
+  td {
+    border-top: 1px solid #ddd;
+  }
+}
+
+@page :first {
+  padding-top: 0;
+  @top-left {
+    content: normal;
+    border: none;
+  }
+  @top-center {
+    content: normal;
+    border: none;
+  }
+  @top-right {
+    content: normal;
+    border: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin-bottom: 45mm;
+  padding-top: 20px;
+}
+
+/* Dark mode. */
+@media (prefers-color-scheme: dark) {
+:root {
+  --background-color: #121212;
+  --text-color: #f0f0f0;
+  --title-color: #fff;
+  --link-color: #4da4f0;
+  --highlight-color: #282828;
+  --line-color: #444;
+  --pilcrow-weak: #444;
+  --pilcrow-strong: #666;
+  scrollbar-color: #777 #333;
+}
+}
+
+/* SVG Trick: a prefix match works because only black and white are allowed */
+svg :is([stroke="black"], [stroke^="#000"]) {
+  stroke: var(--text-color);
+}
+svg :is([stroke="white"], [stroke^="#fff"]) {
+  stroke: var(--background-color);
+}
+svg :is([fill="black"], [fill^="#000"], :not([fill])) {
+  fill: var(--text-color);
+}
+svg :is([fill="white"], [fill^="#fff"]) {
+  fill: var(--background-color);
+}
+</style>
+
+</head>
+<body class="xml2rfc">
+<table class="ears">
+<thead><tr>
+<td class="left">Internet-Draft</td>
+<td class="center">PACE over MOQT</td>
+<td class="right">June 2026</td>
+</tr></thead>
+<tfoot><tr>
+<td class="left">Nandakumar &amp; Jennings</td>
+<td class="center">Expires 30 December 2026</td>
+<td class="right">[Page]</td>
+</tr></tfoot>
+</table>
+<div id="external-metadata" class="document-information"></div>
+<div id="internal-metadata" class="document-information">
+<dl id="identifiers">
+<dt class="label-workgroup">Workgroup:</dt>
+<dd class="workgroup">Agent Communication Protocols</dd>
+<dt class="label-internet-draft">Internet-Draft:</dt>
+<dd class="internet-draft">draft-nandakumar-agentproto-moq-pace-latest</dd>
+<dt class="label-published">Published:</dt>
+<dd class="published">
+<time datetime="2026-06-28" class="published">28 June 2026</time>
+    </dd>
+<dt class="label-intended-status">Intended Status:</dt>
+<dd class="intended-status">Standards Track</dd>
+<dt class="label-expires">Expires:</dt>
+<dd class="expires"><time datetime="2026-12-30">30 December 2026</time></dd>
+<dt class="label-authors">Authors:</dt>
+<dd class="authors">
+<div class="author">
+      <div class="author-name">S. Nandakumar</div>
+<div class="org">Cisco</div>
+</div>
+<div class="author">
+      <div class="author-name">C. Jennings</div>
+<div class="org">Cisco Systems</div>
+</div>
+</dd>
+</dl>
+</div>
+<h1 id="title">PACE: Protocol for Agent Communication Exchange</h1>
+<section id="section-abstract">
+      <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
+<p id="section-abstract-1">This document defines the Protocol for Agent Communication Exchange (PACE),
+a session protocol for AI agent communication over Media over QUIC Transport
+(MOQT). PACE provides session lifecycle management, multi-modal data
+exchange, agent identity verification, and delegated authorization within
+MOQT's publish/subscribe model, supporting point-to-point and
+point-to-multipoint topologies through relay infrastructure.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+</section>
+<section class="note rfcEditorRemove" id="section-note.1">
+      <h2 id="name-about-this-document">
+<a href="#name-about-this-document" class="section-name selfRef">About This Document</a>
+      </h2>
+<p id="section-note.1-1">This note is to be removed before publishing as an RFC.<a href="#section-note.1-1" class="pilcrow">¶</a></p>
+<p id="section-note.1-2">
+        The latest revision of this draft can be found at <span><a href="https://suhasHere.github.io/draft-a2a-moqt-transport/draft-nandakumar-ai-agent-moq-transport.html">https://suhasHere.github.io/draft-a2a-moqt-transport/draft-nandakumar-ai-agent-moq-transport.html</a></span>.
+        Status information for this document may be found at <span><a href="https://datatracker.ietf.org/doc/draft-nandakumar-agentproto-moq-pace/">https://datatracker.ietf.org/doc/draft-nandakumar-agentproto-moq-pace/</a></span>.<a href="#section-note.1-2" class="pilcrow">¶</a></p>
+<p id="section-note.1-3">
+        Discussion of this document takes place on the
+        Agent Communication Protocols Working Group mailing list (<span><a href="mailto:agent2agent@ietf.org">mailto:agent2agent@ietf.org</a></span>),
+        which is archived at <span><a href="https://mailarchive.ietf.org/arch/browse/agent2agent/">https://mailarchive.ietf.org/arch/browse/agent2agent/</a></span>.
+        Subscribe at <span><a href="https://www.ietf.org/mailman/listinfo/agent2agent/">https://www.ietf.org/mailman/listinfo/agent2agent/</a></span>.<a href="#section-note.1-3" class="pilcrow">¶</a></p>
+<p id="section-note.1-4">Source for this draft and an issue tracker can be found at
+        <span><a href="https://github.com/suhasHere/draft-a2a-moqt-transport">https://github.com/suhasHere/draft-a2a-moqt-transport</a></span>.<a href="#section-note.1-4" class="pilcrow">¶</a></p>
+</section>
+<div id="status-of-memo">
+<section id="section-boilerplate.1">
+        <h2 id="name-status-of-this-memo">
+<a href="#name-status-of-this-memo" class="section-name selfRef">Status of This Memo</a>
+        </h2>
+<p id="section-boilerplate.1-1">
+        This Internet-Draft is submitted in full conformance with the
+        provisions of BCP 78 and BCP 79.<a href="#section-boilerplate.1-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-2">
+        Internet-Drafts are working documents of the Internet Engineering Task
+        Force (IETF). Note that other groups may also distribute working
+        documents as Internet-Drafts. The list of current Internet-Drafts is
+        at <span><a href="https://datatracker.ietf.org/drafts/current/">https://datatracker.ietf.org/drafts/current/</a></span>.<a href="#section-boilerplate.1-2" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-3">
+        Internet-Drafts are draft documents valid for a maximum of six months
+        and may be updated, replaced, or obsoleted by other documents at any
+        time. It is inappropriate to use Internet-Drafts as reference
+        material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-4">
+        This Internet-Draft will expire on 30 December 2026.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="copyright">
+<section id="section-boilerplate.2">
+        <h2 id="name-copyright-notice">
+<a href="#name-copyright-notice" class="section-name selfRef">Copyright Notice</a>
+        </h2>
+<p id="section-boilerplate.2-1">
+            Copyright (c) 2026 IETF Trust and the persons identified as the
+            document authors. All rights reserved.<a href="#section-boilerplate.2-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.2-2">
+            This document is subject to BCP 78 and the IETF Trust's Legal
+            Provisions Relating to IETF Documents
+            (<span><a href="https://trustee.ietf.org/license-info">https://trustee.ietf.org/license-info</a></span>) in effect on the date of
+            publication of this document. Please review these documents
+            carefully, as they describe your rights and restrictions with
+            respect to this document. Code Components extracted from this
+            document must include Revised BSD License text as described in
+            Section 4.e of the Trust Legal Provisions and are provided without
+            warranty as described in the Revised BSD License.<a href="#section-boilerplate.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="toc">
+<section id="section-toc.1">
+        <a href="#" onclick="scroll(0,0)" class="toplink">▲</a><h2 id="name-table-of-contents">
+<a href="#name-table-of-contents" class="section-name selfRef">Table of Contents</a>
+        </h2>
+<nav class="toc"><ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1">
+            <p id="section-toc.1-1.1.1" class="keepWithNext"><a href="#section-1" class="auto internal xref">1</a>.  <a href="#name-introduction" class="internal xref">Introduction</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.1">
+                <p id="section-toc.1-1.1.2.1.1" class="keepWithNext"><a href="#section-1.1" class="auto internal xref">1.1</a>.  <a href="#name-design-goals" class="internal xref">Design Goals</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.2">
+                <p id="section-toc.1-1.1.2.2.1" class="keepWithNext"><a href="#section-1.2" class="auto internal xref">1.2</a>.  <a href="#name-requirements-language" class="internal xref">Requirements Language</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2">
+            <p id="section-toc.1-1.2.1"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-architecture-overview" class="internal xref">Architecture Overview</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2.2.1">
+                <p id="section-toc.1-1.2.2.1.1"><a href="#section-2.1" class="auto internal xref">2.1</a>.  <a href="#name-why-moqt" class="internal xref">Why MOQT?</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
+            <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-moqt-mapping" class="internal xref">MOQT Mapping</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1">
+                <p id="section-toc.1-1.3.2.1.1"><a href="#section-3.1" class="auto internal xref">3.1</a>.  <a href="#name-namespace-organization" class="internal xref">Namespace Organization</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1.2.1">
+                    <p id="section-toc.1-1.3.2.1.2.1.1"><a href="#section-3.1.1" class="auto internal xref">3.1.1</a>.  <a href="#name-agent-namespace" class="internal xref">Agent Namespace</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1.2.2">
+                    <p id="section-toc.1-1.3.2.1.2.2.1"><a href="#section-3.1.2" class="auto internal xref">3.1.2</a>.  <a href="#name-session-communication-names" class="internal xref">Session Communication Namespace</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1.2.3">
+                    <p id="section-toc.1-1.3.2.1.2.3.1"><a href="#section-3.1.3" class="auto internal xref">3.1.3</a>.  <a href="#name-session-discovery-namespace" class="internal xref">Session Discovery Namespace</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2">
+                <p id="section-toc.1-1.3.2.2.1"><a href="#section-3.2" class="auto internal xref">3.2</a>.  <a href="#name-transport-binding" class="internal xref">Transport Binding</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2.2.1">
+                    <p id="section-toc.1-1.3.2.2.2.1.1"><a href="#section-3.2.1" class="auto internal xref">3.2.1</a>.  <a href="#name-connection-establishment" class="internal xref">Connection Establishment</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2.2.2">
+                    <p id="section-toc.1-1.3.2.2.2.2.1"><a href="#section-3.2.2" class="auto internal xref">3.2.2</a>.  <a href="#name-track-organization" class="internal xref">Track Organization</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2.2.3">
+                    <p id="section-toc.1-1.3.2.2.2.3.1"><a href="#section-3.2.3" class="auto internal xref">3.2.3</a>.  <a href="#name-message-serialization" class="internal xref">Message Serialization</a></p>
+</li>
+                </ul>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-session-management" class="internal xref">Session Management</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-session-lifecycle" class="internal xref">Session Lifecycle</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-session-establishment" class="internal xref">Session Establishment</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2.2.1">
+                    <p id="section-toc.1-1.4.2.2.2.1.1"><a href="#section-4.2.1" class="auto internal xref">4.2.1</a>.  <a href="#name-session-parameters" class="internal xref">Session Parameters</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2.2.2">
+                    <p id="section-toc.1-1.4.2.2.2.2.1"><a href="#section-4.2.2" class="auto internal xref">4.2.2</a>.  <a href="#name-moqt-setup-extensions" class="internal xref">MOQT Setup Extensions</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.3">
+                <p id="section-toc.1-1.4.2.3.1"><a href="#section-4.3" class="auto internal xref">4.3</a>.  <a href="#name-timed-sessions" class="internal xref">Timed Sessions</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.4">
+                <p id="section-toc.1-1.4.2.4.1"><a href="#section-4.4" class="auto internal xref">4.4</a>.  <a href="#name-session-update" class="internal xref">Session Update</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.5">
+                <p id="section-toc.1-1.4.2.5.1"><a href="#section-4.5" class="auto internal xref">4.5</a>.  <a href="#name-session-recovery" class="internal xref">Session Recovery</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.6">
+                <p id="section-toc.1-1.4.2.6.1"><a href="#section-4.6" class="auto internal xref">4.6</a>.  <a href="#name-session-termination" class="internal xref">Session Termination</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-agent-identity-and-discover" class="internal xref">Agent Identity and Discovery</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.1">
+                <p id="section-toc.1-1.5.2.1.1"><a href="#section-5.1" class="auto internal xref">5.1</a>.  <a href="#name-agent-identity-model" class="internal xref">Agent Identity Model</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.1.2.1">
+                    <p id="section-toc.1-1.5.2.1.2.1.1"><a href="#section-5.1.1" class="auto internal xref">5.1.1</a>.  <a href="#name-agent-identity-token" class="internal xref">Agent Identity Token</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.1.2.2">
+                    <p id="section-toc.1-1.5.2.1.2.2.1"><a href="#section-5.1.2" class="auto internal xref">5.1.2</a>.  <a href="#name-delegation-chains" class="internal xref">Delegation Chains</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2">
+                <p id="section-toc.1-1.5.2.2.1"><a href="#section-5.2" class="auto internal xref">5.2</a>.  <a href="#name-agent-discovery" class="internal xref">Agent Discovery</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2.2.1">
+                    <p id="section-toc.1-1.5.2.2.2.1.1"><a href="#section-5.2.1" class="auto internal xref">5.2.1</a>.  <a href="#name-phase-1-discovering-agents-" class="internal xref">Phase 1: Discovering Agents on the Network</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2.2.2">
+                    <p id="section-toc.1-1.5.2.2.2.2.1"><a href="#section-5.2.2" class="auto internal xref">5.2.2</a>.  <a href="#name-phase-2-following-an-agent" class="internal xref">Phase 2: Following an Agent</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2.2.3">
+                    <p id="section-toc.1-1.5.2.2.2.3.1"><a href="#section-5.2.3" class="auto internal xref">5.2.3</a>.  <a href="#name-agent-card" class="internal xref">Agent Card</a></p>
+</li>
+                </ul>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-multi-modal-data-exchange" class="internal xref">Multi-Modal Data Exchange</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.1">
+                <p id="section-toc.1-1.6.2.1.1"><a href="#section-6.1" class="auto internal xref">6.1</a>.  <a href="#name-modality-types" class="internal xref">Modality Types</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.2">
+                <p id="section-toc.1-1.6.2.2.1"><a href="#section-6.2" class="auto internal xref">6.2</a>.  <a href="#name-channel-architecture" class="internal xref">Channel Architecture</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.3">
+                <p id="section-toc.1-1.6.2.3.1"><a href="#section-6.3" class="auto internal xref">6.3</a>.  <a href="#name-priority-and-quality-of-ser" class="internal xref">Priority and Quality of Service</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.4">
+                <p id="section-toc.1-1.6.2.4.1"><a href="#section-6.4" class="auto internal xref">6.4</a>.  <a href="#name-request-response-pattern" class="internal xref">Request/Response Pattern</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.5">
+                <p id="section-toc.1-1.6.2.5.1"><a href="#section-6.5" class="auto internal xref">6.5</a>.  <a href="#name-streaming-pattern" class="internal xref">Streaming Pattern</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.6">
+                <p id="section-toc.1-1.6.2.6.1"><a href="#section-6.6" class="auto internal xref">6.6</a>.  <a href="#name-real-time-media-exchange" class="internal xref">Real-Time Media Exchange</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-communication-topologies" class="internal xref">Communication Topologies</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-protocol-bindings" class="internal xref">Protocol Bindings</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.1">
+                <p id="section-toc.1-1.8.2.1.1"><a href="#section-8.1" class="auto internal xref">8.1</a>.  <a href="#name-binding-architecture" class="internal xref">Binding Architecture</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2">
+                <p id="section-toc.1-1.8.2.2.1"><a href="#section-8.2" class="auto internal xref">8.2</a>.  <a href="#name-a2a-binding" class="internal xref">A2A Binding</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2.2.1">
+                    <p id="section-toc.1-1.8.2.2.2.1.1"><a href="#section-8.2.1" class="auto internal xref">8.2.1</a>.  <a href="#name-namespace-structure" class="internal xref">Namespace Structure</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2.2.2">
+                    <p id="section-toc.1-1.8.2.2.2.2.1"><a href="#section-8.2.2" class="auto internal xref">8.2.2</a>.  <a href="#name-a2a-operation-mapping" class="internal xref">A2A Operation Mapping</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2.2.3">
+                    <p id="section-toc.1-1.8.2.2.2.3.1"><a href="#section-8.2.3" class="auto internal xref">8.2.3</a>.  <a href="#name-message-format" class="internal xref">Message Format</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2.2.4">
+                    <p id="section-toc.1-1.8.2.2.2.4.1"><a href="#section-8.2.4" class="auto internal xref">8.2.4</a>.  <a href="#name-priority-mapping" class="internal xref">Priority Mapping</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2.2.5">
+                    <p id="section-toc.1-1.8.2.2.2.5.1"><a href="#section-8.2.5" class="auto internal xref">8.2.5</a>.  <a href="#name-streaming-support" class="internal xref">Streaming Support</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2.2.6">
+                    <p id="section-toc.1-1.8.2.2.2.6.1"><a href="#section-8.2.6" class="auto internal xref">8.2.6</a>.  <a href="#name-a2a-agent-card-with-moqt-ex" class="internal xref">A2A Agent Card with MOQT Extension</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.3">
+                <p id="section-toc.1-1.8.2.3.1"><a href="#section-8.3" class="auto internal xref">8.3</a>.  <a href="#name-mcp-binding" class="internal xref">MCP Binding</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.4">
+                <p id="section-toc.1-1.8.2.4.1"><a href="#section-8.4" class="auto internal xref">8.4</a>.  <a href="#name-autogen-binding" class="internal xref">AutoGen Binding</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.4.2.1">
+                    <p id="section-toc.1-1.8.2.4.2.1.1"><a href="#section-8.4.1" class="auto internal xref">8.4.1</a>.  <a href="#name-namespace-structure-2" class="internal xref">Namespace Structure</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.4.2.2">
+                    <p id="section-toc.1-1.8.2.4.2.2.1"><a href="#section-8.4.2" class="auto internal xref">8.4.2</a>.  <a href="#name-message-format-2" class="internal xref">Message Format</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.4.2.3">
+                    <p id="section-toc.1-1.8.2.4.2.3.1"><a href="#section-8.4.3" class="auto internal xref">8.4.3</a>.  <a href="#name-conversation-patterns" class="internal xref">Conversation Patterns</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.4.2.4">
+                    <p id="section-toc.1-1.8.2.4.2.4.1"><a href="#section-8.4.4" class="auto internal xref">8.4.4</a>.  <a href="#name-priority-mapping-2" class="internal xref">Priority Mapping</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.5">
+                <p id="section-toc.1-1.8.2.5.1"><a href="#section-8.5" class="auto internal xref">8.5</a>.  <a href="#name-generic-json-rpc-binding" class="internal xref">Generic JSON-RPC Binding</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.5.2.1">
+                    <p id="section-toc.1-1.8.2.5.2.1.1"><a href="#section-8.5.1" class="auto internal xref">8.5.1</a>.  <a href="#name-namespace-structure-3" class="internal xref">Namespace Structure</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.5.2.2">
+                    <p id="section-toc.1-1.8.2.5.2.2.1"><a href="#section-8.5.2" class="auto internal xref">8.5.2</a>.  <a href="#name-message-format-3" class="internal xref">Message Format</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.5.2.3">
+                    <p id="section-toc.1-1.8.2.5.2.3.1"><a href="#section-8.5.3" class="auto internal xref">8.5.3</a>.  <a href="#name-extension-mechanism" class="internal xref">Extension Mechanism</a></p>
+</li>
+                </ul>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-authorization-and-security" class="internal xref">Authorization and Security</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.1">
+                <p id="section-toc.1-1.9.2.1.1"><a href="#section-9.1" class="auto internal xref">9.1</a>.  <a href="#name-authorization-model" class="internal xref">Authorization Model</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.1.2.1">
+                    <p id="section-toc.1-1.9.2.1.2.1.1"><a href="#section-9.1.1" class="auto internal xref">9.1.1</a>.  <a href="#name-behavior-driven-scopes" class="internal xref">Behavior-Driven Scopes</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.1.2.2">
+                    <p id="section-toc.1-1.9.2.1.2.2.1"><a href="#section-9.1.2" class="auto internal xref">9.1.2</a>.  <a href="#name-delegated-authorization" class="internal xref">Delegated Authorization</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.1.2.3">
+                    <p id="section-toc.1-1.9.2.1.2.3.1"><a href="#section-9.1.3" class="auto internal xref">9.1.3</a>.  <a href="#name-confirmation-and-evidence" class="internal xref">Confirmation and Evidence</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.2">
+                <p id="section-toc.1-1.9.2.2.1"><a href="#section-9.2" class="auto internal xref">9.2</a>.  <a href="#name-transport-security" class="internal xref">Transport Security</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9.2.3">
+                <p id="section-toc.1-1.9.2.3.1"><a href="#section-9.3" class="auto internal xref">9.3</a>.  <a href="#name-privacy-considerations" class="internal xref">Privacy Considerations</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
+            <p id="section-toc.1-1.10.1"><a href="#section-10" class="auto internal xref">10</a>. <a href="#name-scalability-and-reliability" class="internal xref">Scalability and Reliability</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10.2.1">
+                <p id="section-toc.1-1.10.2.1.1"><a href="#section-10.1" class="auto internal xref">10.1</a>.  <a href="#name-failure-modes-and-recovery" class="internal xref">Failure Modes and Recovery</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#section-11" class="auto internal xref">11</a>. <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12">
+            <p id="section-toc.1-1.12.1"><a href="#section-12" class="auto internal xref">12</a>. <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12.2.1">
+                <p id="section-toc.1-1.12.2.1.1"><a href="#section-12.1" class="auto internal xref">12.1</a>.  <a href="#name-moqt-setup-parameter-regist" class="internal xref">MOQT Setup Parameter Registry</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12.2.2">
+                <p id="section-toc.1-1.12.2.2.1"><a href="#section-12.2" class="auto internal xref">12.2</a>.  <a href="#name-pace-protocol-binding-regis" class="internal xref">PACE Protocol Binding Registry</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12.2.3">
+                <p id="section-toc.1-1.12.2.3.1"><a href="#section-12.3" class="auto internal xref">12.3</a>.  <a href="#name-pace-message-type-registry" class="internal xref">PACE Message Type Registry</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13">
+            <p id="section-toc.1-1.13.1"><a href="#section-13" class="auto internal xref">13</a>. <a href="#name-references" class="internal xref">References</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.1">
+                <p id="section-toc.1-1.13.2.1.1"><a href="#section-13.1" class="auto internal xref">13.1</a>.  <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13.2.2">
+                <p id="section-toc.1-1.13.2.2.1"><a href="#section-13.2" class="auto internal xref">13.2</a>.  <a href="#name-informative-references" class="internal xref">Informative References</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14">
+            <p id="section-toc.1-1.14.1"><a href="#appendix-A" class="auto internal xref">Appendix A</a>.  <a href="#name-example-workflows" class="internal xref">Example Workflows</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.1">
+                <p id="section-toc.1-1.14.2.1.1"><a href="#appendix-A.1" class="auto internal xref">A.1</a>.  <a href="#name-agent-to-agent-task-delegat" class="internal xref">Agent-to-Agent: Task Delegation</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.2">
+                <p id="section-toc.1-1.14.2.2.1"><a href="#appendix-A.2" class="auto internal xref">A.2</a>.  <a href="#name-agent-to-tool-mcp-tool-invo" class="internal xref">Agent-to-Tool: MCP Tool Invocation</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.3">
+                <p id="section-toc.1-1.14.2.3.1"><a href="#appendix-A.3" class="auto internal xref">A.3</a>.  <a href="#name-multi-agent-collaboration" class="internal xref">Multi-Agent Collaboration</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.4">
+                <p id="section-toc.1-1.14.2.4.1"><a href="#appendix-A.4" class="auto internal xref">A.4</a>.  <a href="#name-agent-to-tool-with-streamin" class="internal xref">Agent-to-Tool with Streaming: Long-Running Operation</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15">
+            <p id="section-toc.1-1.15.1"><a href="#appendix-B" class="auto internal xref">Appendix B</a>.  <a href="#name-acknowledgments" class="internal xref">Acknowledgments</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.16">
+            <p id="section-toc.1-1.16.1"><a href="#appendix-C" class="auto internal xref"></a><a href="#name-authors-addresses" class="internal xref">Authors' Addresses</a></p>
+</li>
+        </ul>
+</nav>
+</section>
+</div>
+<div id="introduction">
+<section id="section-1">
+      <h2 id="name-introduction">
+<a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
+      </h2>
+<p id="section-1-1">AI agents are autonomous software systems that interact with other agents
+and tools to complete tasks. As agent communication expands across the
+Internet, it requires: verifiable agent identity independent of users,
+capability discovery and collaboration across network boundaries,
+multi-modal data exchange (text, audio, video) with session management,
+and delegated authorization across agent chains.<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">This document defines the Protocol for Agent Communication Exchange (PACE),
+a session layer over Media over QUIC Transport (MOQT) <span>[<a href="#MoQ-TRANSPORT" class="cite xref">MoQ-TRANSPORT</a>]</span>.
+PACE enables diverse agent protocols to leverage MOQT's publish/subscribe
+model, relay-based fan-out, built-in prioritization, and efficient
+multiplexing over QUIC.<a href="#section-1-2" class="pilcrow">¶</a></p>
+<div id="design-goals">
+<section id="section-1.1">
+        <h3 id="name-design-goals">
+<a href="#section-1.1" class="section-number selfRef">1.1. </a><a href="#name-design-goals" class="section-name selfRef">Design Goals</a>
+        </h3>
+<ol start="1" type="1" class="normal type-1" id="section-1.1-1">
+<li id="section-1.1-1.1">
+            <p id="section-1.1-1.1.1"><strong>Session Lifecycle</strong>: Timed sessions with establishment, update,
+suspension, and termination.<a href="#section-1.1-1.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.1-1.2">
+            <p id="section-1.1-1.2.1"><strong>Multi-Modal</strong>: Concurrent real-time media, chat, and operations.<a href="#section-1.1-1.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.1-1.3">
+            <p id="section-1.1-1.3.1"><strong>Scalable</strong>: Relay-based fan-out with failure recovery.<a href="#section-1.1-1.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.1-1.4">
+            <p id="section-1.1-1.4.1"><strong>Flexible Topologies</strong>: Point-to-point and point-to-multipoint.<a href="#section-1.1-1.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.1-1.5">
+            <p id="section-1.1-1.5.1"><strong>Agent Identity</strong>: Authentication independent of user identity with
+delegated authorization.<a href="#section-1.1-1.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-1.1-1.6">
+            <p id="section-1.1-1.6.1"><strong>Protocol Agnostic</strong>: Usable by A2A, MCP, and custom protocols.<a href="#section-1.1-1.6.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="requirements-language">
+<section id="section-1.2">
+        <h3 id="name-requirements-language">
+<a href="#section-1.2" class="section-number selfRef">1.2. </a><a href="#name-requirements-language" class="section-name selfRef">Requirements Language</a>
+        </h3>
+<p id="section-1.2-1">The key words "<span class="bcp14">MUST</span>", "<span class="bcp14">MUST NOT</span>", "<span class="bcp14">REQUIRED</span>", "<span class="bcp14">SHALL</span>", "<span class="bcp14">SHALL NOT</span>", "<span class="bcp14">SHOULD</span>", "<span class="bcp14">SHOULD NOT</span>", "<span class="bcp14">RECOMMENDED</span>", "<span class="bcp14">NOT RECOMMENDED</span>",
+"<span class="bcp14">MAY</span>", and "<span class="bcp14">OPTIONAL</span>" in this document are to be interpreted as
+described in BCP 14 <span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span> when, and only when, they
+appear in all capitals, as shown here.<a href="#section-1.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="architecture-overview">
+<section id="section-2">
+      <h2 id="name-architecture-overview">
+<a href="#section-2" class="section-number selfRef">2. </a><a href="#name-architecture-overview" class="section-name selfRef">Architecture Overview</a>
+      </h2>
+<p id="section-2-1">The PACE architecture layers as follows:<a href="#section-2-1" class="pilcrow">¶</a></p>
+<span id="name-pace-architecture"></span><div id="_figure-arch">
+<figure id="figure-1">
+        <div class="alignLeft art-text artwork" id="section-2-2.1">
+<pre>
+┌─────────────────────────────────────────────────────────┐
+│  Application Protocols (A2A, MCP, AutoGen, Custom)      │
+├─────────────────────────────────────────────────────────┤
+│  PACE: Sessions │ Identity │ Auth │ Multi-Modal │ QoS   │
+├─────────────────────────────────────────────────────────┤
+│  MOQT: Pub/Sub │ Namespace Routing │ Relay Caching      │
+├─────────────────────────────────────────────────────────┤
+│  QUIC / WebTransport: TLS 1.3 │ Mux │ Migration         │
+└─────────────────────────────────────────────────────────┘
+</pre>
+</div>
+<figcaption><a href="#figure-1" class="selfRef">Figure 1</a>:
+<a href="#name-pace-architecture" class="selfRef">PACE Architecture</a>
+        </figcaption></figure>
+</div>
+<div id="why-moqt">
+<section id="section-2.1">
+        <h3 id="name-why-moqt">
+<a href="#section-2.1" class="section-number selfRef">2.1. </a><a href="#name-why-moqt" class="section-name selfRef">Why MOQT?</a>
+        </h3>
+<p id="section-2.1-1">Media over QUIC Transport (MOQT) <span>[<a href="#MoQ-TRANSPORT" class="cite xref">MoQ-TRANSPORT</a>]</span> is a publish/subscribe
+protocol over QUIC. PACE adopts MOQT as its transport substrate for the
+following reasons:<a href="#section-2.1-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-2.1-2.1">
+            <p id="section-2.1-2.1.1"><strong>Native pub/sub</strong> — Agents publish and subscribe without polling or
+long-lived HTTP connections; the relay handles fan-out<a href="#section-2.1-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.2">
+            <p id="section-2.1-2.2.1"><strong>Prefix-based routing</strong> — SUBSCRIBE_TRACKS on an agent's prefix
+automatically delivers all current and future tracks, enabling session
+notification without dedicated signaling channels<a href="#section-2.1-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.3">
+            <p id="section-2.1-2.3.1"><strong>Relay architecture</strong> — No direct peer-to-peer connections required;
+relays provide NAT traversal and load balancing out of the box<a href="#section-2.1-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.4">
+            <p id="section-2.1-2.4.1"><strong>Multi-party fan-out</strong> — A single PUBLISH reaches all subscribers via
+relay; no application-level broadcast logic needed for multi-agent
+collaboration<a href="#section-2.1-2.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.5">
+            <p id="section-2.1-2.5.1"><strong>Relay caching</strong> — Late-joining agents receive cached objects, enabling
+session recovery and mid-conversation catch-up without peer
+retransmission<a href="#section-2.1-2.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.6">
+            <p id="section-2.1-2.6.1"><strong>Per-object priority</strong> — Real-time audio/video, control messages, and
+bulk transfers coexist on the same session with differentiated QoS
+(0-255 priority scale)<a href="#section-2.1-2.6.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.7">
+            <p id="section-2.1-2.7.1"><strong>Multiple latency spectrums</strong> — A single MOQT session supports
+sub-100ms real-time media, sub-second interactive messaging, and
+best-effort bulk transfers simultaneously, matching the diverse
+communication needs of AI agents<a href="#section-2.1-2.7.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.8">
+            <p id="section-2.1-2.8.1"><strong>Scalability</strong> — Relays <span class="bcp14">MAY</span> be organized hierarchically for geographic
+distribution, enabling thousands of agents across regions without
+requiring each agent to maintain direct connections to all peers<a href="#section-2.1-2.8.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.9">
+            <p id="section-2.1-2.9.1"><strong>QUIC foundation</strong> — Connection migration (WiFi to cellular),
+multiplexed streams, 0-RTT resumption, and mandatory TLS 1.3<a href="#section-2.1-2.9.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-2.1-2.10">
+            <p id="section-2.1-2.10.1"><strong>Namespace-level access control</strong> — Maps directly to agent
+authorization scopes; relays enforce who can publish/subscribe to
+which namespaces<a href="#section-2.1-2.10.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+</section>
+</div>
+</section>
+</div>
+<div id="moqt-mapping">
+<section id="section-3">
+      <h2 id="name-moqt-mapping">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-moqt-mapping" class="section-name selfRef">MOQT Mapping</a>
+      </h2>
+<div id="namespace">
+<section id="section-3.1">
+        <h3 id="name-namespace-organization">
+<a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-namespace-organization" class="section-name selfRef">Namespace Organization</a>
+        </h3>
+<p id="section-3.1-1">PACE uses MOQT's hierarchical namespace for routing, isolation, and
+multiplexing. MOQT addresses content using a namespace tuple (an ordered
+sequence of string fields) combined with a track name. PACE organizes
+all communication into three namespace scopes defined in the following
+subsections.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
+<div id="agent-namespace">
+<section id="section-3.1.1">
+          <h4 id="name-agent-namespace">
+<a href="#section-3.1.1" class="section-number selfRef">3.1.1. </a><a href="#name-agent-namespace" class="section-name selfRef">Agent Namespace</a>
+          </h4>
+<div class="alignLeft art-text artwork" id="section-3.1.1-1">
+<pre>
+  ("pace", "agents", {agent-id}) -- {track}
+</pre><a href="#section-3.1.1-1" class="pilcrow">¶</a>
+</div>
+<p id="section-3.1.1-2">This is an agent's persistent identity on the relay network. Each agent
+publishes the following tracks:<a href="#section-3.1.1-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-3.1.1-3.1">
+              <p id="section-3.1.1-3.1.1"><code>"card"</code> — Agent Card containing capabilities, identity claims,
+authentication schemes, and MOQT connectivity information<a href="#section-3.1.1-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+<p id="section-3.1.1-4">The common prefix <code>("pace", "agents")</code> enables SUBSCRIBE_NAMESPACE-based
+discovery of all agents on the network. Interested agents then issue
+SUBSCRIBE_TRACKS on a discovered agent's prefix to receive all current
+and future tracks published by that agent. See <a href="#agent-discovery" class="auto internal xref">Section 5.2</a> for
+the complete discovery flow.<a href="#section-3.1.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="session-communication-namespace">
+<section id="section-3.1.2">
+          <h4 id="name-session-communication-names">
+<a href="#section-3.1.2" class="section-number selfRef">3.1.2. </a><a href="#name-session-communication-names" class="section-name selfRef">Session Communication Namespace</a>
+          </h4>
+<div class="alignLeft art-text artwork" id="section-3.1.2-1">
+<pre>
+  ("pace", "agents", {agent-id}, {session-id}) -- {track}
+</pre><a href="#section-3.1.2-1" class="pilcrow">¶</a>
+</div>
+<p id="section-3.1.2-2">A session-id is a shared UUID representing a collaboration context — it
+is not scoped to or owned by any single agent. Any agent can generate a
+session-id to initiate a collaboration. When multiple agents participate
+in a session, they each publish tracks under their own agent namespace
+using the same session-id. Agents that have issued SUBSCRIBE_TRACKS on
+a peer's agent prefix are automatically notified (via relay-forwarded
+PUBLISH messages) when that peer creates new session tracks.<a href="#section-3.1.2-2" class="pilcrow">¶</a></p>
+<p id="section-3.1.2-3">Each agent in a session publishes the following tracks:<a href="#section-3.1.2-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-3.1.2-4.1">
+              <p id="section-3.1.2-4.1.1"><code>"ctrl"</code> — Session lifecycle messages (SESSION_INIT, SESSION_ACCEPT,
+SESSION_UPDATE, SESSION_CLOSE)<a href="#section-3.1.2-4.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.2-4.2">
+              <p id="section-3.1.2-4.2.1"><code>"chat"</code> — Chat messages and streaming LLM output<a href="#section-3.1.2-4.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.2-4.3">
+              <p id="section-3.1.2-4.3.1"><code>"audio"</code> — Real-time audio stream<a href="#section-3.1.2-4.3.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.2-4.4">
+              <p id="section-3.1.2-4.4.1"><code>"video"</code> — Real-time video stream<a href="#section-3.1.2-4.4.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.2-4.5">
+              <p id="section-3.1.2-4.5.1"><code>"ops/{req-id}"</code> — Request/response operations (one track per request)<a href="#section-3.1.2-4.5.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+<p id="section-3.1.2-5">Protocol bindings add prefix-scoped tracks to enable multiple protocols
+to operate concurrently within a single session without track name
+collisions:<a href="#section-3.1.2-5" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-3.1.2-6.1">
+              <p id="section-3.1.2-6.1.1"><code>"a2a/{category}/{id}"</code> — A2A protocol operations, where <code>{category}</code>
+is the operation type (e.g., <code>request</code>, <code>response</code>, <code>task</code>, <code>stream</code>)
+and <code>{id}</code> is the request or task identifier<a href="#section-3.1.2-6.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.2-6.2">
+              <p id="section-3.1.2-6.2.1"><code>"mcp/{category}/{id}"</code> — MCP protocol operations, where <code>{category}</code>
+is the primitive type (e.g., <code>tools</code>, <code>resources</code>, <code>prompts</code>) and
+<code>{id}</code> is the tool name or resource URI<a href="#section-3.1.2-6.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.2-6.3">
+              <p id="section-3.1.2-6.3.1"><code>"ext/{proto}/{category}/{id}"</code> — Custom protocol extensions, where
+<code>{proto}</code> identifies the protocol<a href="#section-3.1.2-6.3.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+<p id="section-3.1.2-7">For example, the MCP over MOQT specification <span>[<a href="#MCP-MOQT" class="cite xref">MCP-MOQT</a>]</span> defines
+tracks like <code>(mcp, {session-id}, tools) -- ({tool-name})</code>; within PACE,
+this maps to track name <code>"mcp/tools/{tool-name}"</code> under the agent's
+session namespace, preserving the MCP semantics while coexisting with
+A2A or other protocol tracks in the same session.<a href="#section-3.1.2-7" class="pilcrow">¶</a></p>
+<p id="section-3.1.2-8">See <a href="#example-workflows" class="auto internal xref">Appendix A</a> for concrete examples of agent-to-agent,
+agent-to-tool, and multi-agent collaboration workflows.<a href="#section-3.1.2-8" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="session-discovery-namespace">
+<section id="section-3.1.3">
+          <h4 id="name-session-discovery-namespace">
+<a href="#section-3.1.3" class="section-number selfRef">3.1.3. </a><a href="#name-session-discovery-namespace" class="section-name selfRef">Session Discovery Namespace</a>
+          </h4>
+<div class="alignLeft art-text artwork" id="section-3.1.3-1">
+<pre>
+  ("pace", "discovery", "sessions", {agent-id}) -- {session-id}
+</pre><a href="#section-3.1.3-1" class="pilcrow">¶</a>
+</div>
+<p id="section-3.1.3-2">Agents advertise their active sessions on this top-level discovery
+namespace so that other agents can find sessions to join. Each agent
+publishes one track per active session (the track name is the
+session-id). Each object on a session track contains:<a href="#section-3.1.3-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-3.1.3-3.1">
+              <p id="section-3.1.3-3.1.1"><code>session-id</code> — The shared session UUID<a href="#section-3.1.3-3.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.3-3.2">
+              <p id="section-3.1.3-3.2.1"><code>description</code> — Human-readable purpose of the session<a href="#section-3.1.3-3.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.3-3.3">
+              <p id="section-3.1.3-3.3.1"><code>participants</code> — List of agent-ids currently in the session<a href="#section-3.1.3-3.3.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.1.3-3.4">
+              <p id="section-3.1.3-3.4.1"><code>modalities</code> — Supported data modalities (text, audio, video, etc.)<a href="#section-3.1.3-3.4.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+<p id="section-3.1.3-4">Agents discover active sessions by issuing SUBSCRIBE_NAMESPACE on
+<code>("pace", "discovery", "sessions")</code>.<a href="#section-3.1.3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="transport-binding">
+<section id="section-3.2">
+        <h3 id="name-transport-binding">
+<a href="#section-3.2" class="section-number selfRef">3.2. </a><a href="#name-transport-binding" class="section-name selfRef">Transport Binding</a>
+        </h3>
+<div id="connection-establishment">
+<section id="section-3.2.1">
+          <h4 id="name-connection-establishment">
+<a href="#section-3.2.1" class="section-number selfRef">3.2.1. </a><a href="#name-connection-establishment" class="section-name selfRef">Connection Establishment</a>
+          </h4>
+<p id="section-3.2.1-1">Agents <span class="bcp14">MUST</span> establish either a native QUIC connection or a WebTransport
+<span>[<a href="#RFC9297" class="cite xref">RFC9297</a>]</span> session as defined in <span>[<a href="#MoQ-TRANSPORT" class="cite xref">MoQ-TRANSPORT</a>]</span>. For native QUIC
+connections, agents <span class="bcp14">MUST</span> use the ALPN value "moqt". For WebTransport,
+the protocol is negotiated using the "WT-Available-Protocols" mechanism
+as specified in <span>[<a href="#MoQ-TRANSPORT" class="cite xref">MoQ-TRANSPORT</a>]</span>.<a href="#section-3.2.1-1" class="pilcrow">¶</a></p>
+<p id="section-3.2.1-2">Upon establishing the MOQT session (CLIENT_SETUP / SERVER_SETUP), an
+agent performs the bootstrap sequence to make itself discoverable:<a href="#section-3.2.1-2" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-3.2.1-3">
+<li id="section-3.2.1-3.1">
+              <p id="section-3.2.1-3.1.1"><strong>Announce</strong>: PUBLISH_NAMESPACE on <code>("pace", "agents", {agent-id})</code><a href="#section-3.2.1-3.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li id="section-3.2.1-3.2">
+              <p id="section-3.2.1-3.2.1"><strong>Publish Agent Card</strong>: PUBLISH on track <code>"card"</code> under its namespace<a href="#section-3.2.1-3.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li id="section-3.2.1-3.3">
+              <p id="section-3.2.1-3.3.1"><strong>Discover peers</strong>: SUBSCRIBE_NAMESPACE on <code>("pace", "agents")</code> to
+learn about other agents on the network<a href="#section-3.2.1-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          </ol>
+<p id="section-3.2.1-4">See <a href="#agent-discovery" class="auto internal xref">Section 5.2</a> for the full discovery flow that follows
+bootstrap.<a href="#section-3.2.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="track-organization">
+<section id="section-3.2.2">
+          <h4 id="name-track-organization">
+<a href="#section-3.2.2" class="section-number selfRef">3.2.2. </a><a href="#name-track-organization" class="section-name selfRef">Track Organization</a>
+          </h4>
+<p id="section-3.2.2-1">Each agent publishes exclusively on its own tracks. Other agents
+issue SUBSCRIBE_TRACKS on a peer's agent prefix to receive all tracks
+published by that peer, including session tracks. The relay handles
+fan-out to all subscribers via prefix matching. This per-agent
+publishing model ensures clear ownership and enables relay caching.<a href="#section-3.2.2-1" class="pilcrow">¶</a></p>
+<p id="section-3.2.2-2">Namespace structure and track names are defined in <a href="#namespace" class="auto internal xref">Section 3.1</a>.<a href="#section-3.2.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="message-serialization">
+<section id="section-3.2.3">
+          <h4 id="name-message-serialization">
+<a href="#section-3.2.3" class="section-number selfRef">3.2.3. </a><a href="#name-message-serialization" class="section-name selfRef">Message Serialization</a>
+          </h4>
+<p id="section-3.2.3-1">Protocol messages are encapsulated within MOQT objects using a PACE
+envelope prepended to the payload:<a href="#section-3.2.3-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-1">
+            <caption><a href="#table-1" class="selfRef">Table 1</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">Field</th>
+                <th class="text-left" rowspan="1" colspan="1">Size</th>
+                <th class="text-left" rowspan="1" colspan="1">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>version</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">1 byte</td>
+                <td class="text-left" rowspan="1" colspan="1">PACE envelope version (currently 0x01)</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>flags</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">1 byte</td>
+                <td class="text-left" rowspan="1" colspan="1">0x01=compressed, 0x02=fragmented, 0x04=encrypted</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>length</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">varint</td>
+                <td class="text-left" rowspan="1" colspan="1">Length of the serialized protocol message</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">payload</td>
+                <td class="text-left" rowspan="1" colspan="1">variable</td>
+                <td class="text-left" rowspan="1" colspan="1">Serialized protocol message</td>
+              </tr>
+            </tbody>
+          </table>
+<p id="section-3.2.3-3">Bindings <span class="bcp14">SHOULD</span> preserve native message formats. For example, A2A
+messages retain their JSON-RPC 2.0 format; the PACE envelope wraps
+the serialized JSON bytes.<a href="#section-3.2.3-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+</section>
+</div>
+<div id="session-management">
+<section id="section-4">
+      <h2 id="name-session-management">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-session-management" class="section-name selfRef">Session Management</a>
+      </h2>
+<p id="section-4-1">A PACE session represents a logical communication context between two or
+more agents. Sessions provide lifetime management, context preservation,
+and failure recovery. All session operations use the namespace structure
+defined in <a href="#namespace" class="auto internal xref">Section 3.1</a>.<a href="#section-4-1" class="pilcrow">¶</a></p>
+<div id="session-lifecycle">
+<section id="section-4.1">
+        <h3 id="name-session-lifecycle">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-session-lifecycle" class="section-name selfRef">Session Lifecycle</a>
+        </h3>
+<p id="section-4.1-1">Sessions progress through defined states:<a href="#section-4.1-1" class="pilcrow">¶</a></p>
+<span id="name-session-state-machine"></span><div id="_figure-session-states">
+<figure id="figure-2">
+          <div class="alignLeft art-text artwork" id="section-4.1-2.1">
+<pre>
+IDLE ──establish──▶ PENDING ──accept──▶ ACTIVE ◀──update──┐
+  ◀──reject──────────┘                    │  │             │
+                                     suspend  terminate    │
+                                          ▼       │       │
+                                    SUSPENDED     ▼       │
+                                     │  │       CLOSED ◀──┘
+                                     │  └resume──▶ ACTIVE
+                                     └─timeout──▶ CLOSED
+</pre>
+</div>
+<figcaption><a href="#figure-2" class="selfRef">Figure 2</a>:
+<a href="#name-session-state-machine" class="selfRef">Session State Machine</a>
+          </figcaption></figure>
+</div>
+<span class="break"></span><dl class="dlParallel" id="section-4.1-3">
+          <dt id="section-4.1-3.1">IDLE:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.2">
+            <p id="section-4.1-3.2.1">No session exists. Agent is available to initiate or accept sessions.<a href="#section-4.1-3.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.1-3.3">PENDING:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.4">
+            <p id="section-4.1-3.4.1">Establishment in progress (negotiation, authentication).<a href="#section-4.1-3.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.1-3.5">ACTIVE:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.6">
+            <p id="section-4.1-3.6.1">Session established; data exchange occurring. May be updated.<a href="#section-4.1-3.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.1-3.7">SUSPENDED:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.8">
+            <p id="section-4.1-3.8.1">Temporarily inactive, state preserved. Transitions to CLOSED on timeout.<a href="#section-4.1-3.8.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.1-3.9">CLOSED:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.1-3.10">
+            <p id="section-4.1-3.10.1">Session terminated. Resources released.<a href="#section-4.1-3.10.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="session-establishment">
+<section id="section-4.2">
+        <h3 id="name-session-establishment">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-session-establishment" class="section-name selfRef">Session Establishment</a>
+        </h3>
+<p id="section-4.2-1">Session establishment creates a shared communication context between
+two or more agents. Its goals are to negotiate capabilities and
+modalities, exchange and verify identity tokens, and set up the MOQT
+subscriptions so both agents can publish and receive messages.<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<p id="section-4.2-2"><strong>Prerequisite:</strong> Both agents must have completed discovery Phase 2
+(<a href="#agent-discovery" class="auto internal xref">Section 5.2</a>) — meaning they have issued SUBSCRIBE_TRACKS on
+each other's agent prefix. This enables the relay to forward PUBLISH
+messages between them automatically via prefix matching.<a href="#section-4.2-2" class="pilcrow">¶</a></p>
+<p id="section-4.2-3">The following steps describe how Agent A (initiator) establishes a
+session with Agent B (responder):<a href="#section-4.2-3" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-4.2-4">
+<li id="section-4.2-4.1">
+            <p id="section-4.2-4.1.1"><strong>A generates a session-id</strong> (UUID).<a href="#section-4.2-4.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-4.2">
+            <p id="section-4.2-4.2.1"><strong>A publishes SESSION_INIT</strong> — A issues PUBLISH on
+<code>("pace","agents","agent-a",{session-id}) -- "ctrl"</code> containing
+proposed session parameters (target=agent-b, capabilities,
+modalities, identity token, supported protocols).<a href="#section-4.2-4.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-4.3">
+            <p id="section-4.2-4.3.1"><strong>Relay forwards PUBLISH to B</strong> — B's existing SUBSCRIBE_TRACKS on
+<code>("pace","agents","agent-a")</code> prefix-matches the new track. The
+relay forwards the PUBLISH message to B.<a href="#section-4.2-4.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-4.4">
+            <p id="section-4.2-4.4.1"><strong>B accepts the PUBLISH</strong> — this implicitly subscribes B to A's
+ctrl track. B receives the SESSION_INIT object, inspects the
+parameters, and decides whether to accept.<a href="#section-4.2-4.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-4.5">
+            <p id="section-4.2-4.5.1"><strong>B publishes SESSION_ACCEPT</strong> — B issues PUBLISH on
+<code>("pace","agents","agent-b",{session-id}) -- "ctrl"</code> containing
+accepted capabilities and modalities.<a href="#section-4.2-4.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-4.6">
+            <p id="section-4.2-4.6.1"><strong>Relay forwards PUBLISH to A</strong> — A's existing SUBSCRIBE_TRACKS on
+<code>("pace","agents","agent-b")</code> prefix-matches. The relay forwards
+the PUBLISH message to A.<a href="#section-4.2-4.6.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-4.7">
+            <p id="section-4.2-4.7.1"><strong>A accepts the PUBLISH</strong> — A receives the SESSION_ACCEPT object.<a href="#section-4.2-4.7.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-4.2-4.8">
+            <p id="section-4.2-4.8.1"><strong>Session is ACTIVE</strong> — both agents can now publish additional
+tracks under their respective session namespaces. The relay
+forwards all new PUBLISH messages to the peer via the existing
+SUBSCRIBE_TRACKS prefix match.<a href="#section-4.2-4.8.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+<div id="session-parameters">
+<section id="section-4.2.1">
+          <h4 id="name-session-parameters">
+<a href="#section-4.2.1" class="section-number selfRef">4.2.1. </a><a href="#name-session-parameters" class="section-name selfRef">Session Parameters</a>
+          </h4>
+<p id="section-4.2.1-1">The SESSION_INIT object contains:<a href="#section-4.2.1-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-4.2.1-2.1">
+              <p id="section-4.2.1-2.1.1"><code>session-id</code>: Globally unique session identifier (UUID)<a href="#section-4.2.1-2.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-4.2.1-2.2">
+              <p id="section-4.2.1-2.2.1"><code>session-type</code>: Short-lived (bounded duration) or long-lived (indefinite)<a href="#section-4.2.1-2.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-4.2.1-2.3">
+              <p id="section-4.2.1-2.3.1"><code>session-timeout</code>: Maximum idle duration before automatic termination<a href="#section-4.2.1-2.3.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-4.2.1-2.4">
+              <p id="section-4.2.1-2.4.1"><code>max-participants</code>: Maximum number of agents in the session<a href="#section-4.2.1-2.4.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-4.2.1-2.5">
+              <p id="section-4.2.1-2.5.1"><code>supported-modalities</code>: Bitmask of data modalities the agent can handle<a href="#section-4.2.1-2.5.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-4.2.1-2.6">
+              <p id="section-4.2.1-2.6.1"><code>identity-token</code>: Agent identity token (see <a href="#identity-discovery" class="auto internal xref">Section 5</a>)<a href="#section-4.2.1-2.6.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-4.2.1-2.7">
+              <p id="section-4.2.1-2.7.1"><code>supported-protocols</code>: Application protocols offered (A2A, MCP, etc.)<a href="#section-4.2.1-2.7.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+</section>
+</div>
+<div id="moqt-setup-extensions">
+<section id="section-4.2.2">
+          <h4 id="name-moqt-setup-extensions">
+<a href="#section-4.2.2" class="section-number selfRef">4.2.2. </a><a href="#name-moqt-setup-extensions" class="section-name selfRef">MOQT Setup Extensions</a>
+          </h4>
+<p id="section-4.2.2-1">PACE defines the following MOQT setup parameters negotiated during
+CLIENT_SETUP/SERVER_SETUP:<a href="#section-4.2.2-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-2">
+            <caption><a href="#table-2" class="selfRef">Table 2</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">Parameter</th>
+                <th class="text-left" rowspan="1" colspan="1">ID</th>
+                <th class="text-left" rowspan="1" colspan="1">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">pace-version</td>
+                <td class="text-left" rowspan="1" colspan="1">0x50414301</td>
+                <td class="text-left" rowspan="1" colspan="1">PACE protocol version</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">agent-identity</td>
+                <td class="text-left" rowspan="1" colspan="1">0x50414302</td>
+                <td class="text-left" rowspan="1" colspan="1">Agent identity token or certificate reference</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">supported-protocols</td>
+                <td class="text-left" rowspan="1" colspan="1">0x50414303</td>
+                <td class="text-left" rowspan="1" colspan="1">Bitmask of application protocols (A2A=0x01, MCP=0x02)</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">auth-schemes</td>
+                <td class="text-left" rowspan="1" colspan="1">0x50414304</td>
+                <td class="text-left" rowspan="1" colspan="1">Supported authentication schemes</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">session-capabilities</td>
+                <td class="text-left" rowspan="1" colspan="1">0x50414305</td>
+                <td class="text-left" rowspan="1" colspan="1">Session capability flags</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+</section>
+</div>
+<div id="timed-sessions">
+<section id="section-4.3">
+        <h3 id="name-timed-sessions">
+<a href="#section-4.3" class="section-number selfRef">4.3. </a><a href="#name-timed-sessions" class="section-name selfRef">Timed Sessions</a>
+        </h3>
+<p id="section-4.3-1">Sessions are either short-lived (bounded duration, auto-terminates on
+completion or timeout) or long-lived (indefinite, survives idle periods
+via SUSPENDED state). The <code>session-timeout</code> parameter defines the
+maximum idle period before automatic transition to CLOSED.<a href="#section-4.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="session-update">
+<section id="section-4.4">
+        <h3 id="name-session-update">
+<a href="#section-4.4" class="section-number selfRef">4.4. </a><a href="#name-session-update" class="section-name selfRef">Session Update</a>
+        </h3>
+<p id="section-4.4-1">Active sessions can be updated by publishing a SESSION_UPDATE message
+on the control track. Updates can modify modalities, participants,
+authorization scopes, or timeout. All participants <span class="bcp14">MUST</span> acknowledge
+the update before new parameters take effect.<a href="#section-4.4-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="session-recovery">
+<section id="section-4.5">
+        <h3 id="name-session-recovery">
+<a href="#section-4.5" class="section-number selfRef">4.5. </a><a href="#name-session-recovery" class="section-name selfRef">Session Recovery</a>
+        </h3>
+<p id="section-4.5-1">PACE provides graceful recovery from network and server failures:<a href="#section-4.5-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-4.5-2">
+          <dt id="section-4.5-2.1">QUIC Connection Migration:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.5-2.2">
+            <p id="section-4.5-2.2.1">Sessions survive network path changes (e.g., WiFi to cellular)
+via QUIC's connection ID mechanism without re-establishing the
+MOQT session.<a href="#section-4.5-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.5-2.3">Relay Caching:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.5-2.4">
+            <p id="section-4.5-2.4.1">Relays cache recent objects, allowing reconnecting agents to receive
+missed messages without requiring peer retransmission.<a href="#section-4.5-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.5-2.5">Session Resumption:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.5-2.6">
+            <p id="section-4.5-2.6.1">Agents resume SUSPENDED sessions by reconnecting to the relay,
+re-issuing PUBLISH_NAMESPACE and SUBSCRIBE_TRACKS on their agent
+prefix. The relay delivers cached objects from the point of
+disconnection.<a href="#section-4.5-2.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-4.5-2.7">State Checkpointing:</dt>
+          <dd style="margin-left: 1.5em" id="section-4.5-2.8">
+            <p id="section-4.5-2.8.1">Agents <span class="bcp14">SHOULD</span> periodically publish state checkpoints on a dedicated
+track, enabling recovery after relay failures.<a href="#section-4.5-2.8.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="session-termination">
+<section id="section-4.6">
+        <h3 id="name-session-termination">
+<a href="#section-4.6" class="section-number selfRef">4.6. </a><a href="#name-session-termination" class="section-name selfRef">Session Termination</a>
+        </h3>
+<p id="section-4.6-1">Sessions terminate explicitly via SESSION_CLOSE on the control track or
+implicitly via timeout. Upon termination, all subscriptions are
+cancelled, pending operations receive cancellation notifications, and
+session resources are released after a configurable grace period.<a href="#section-4.6-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="identity-discovery">
+<section id="section-5">
+      <h2 id="name-agent-identity-and-discover">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-agent-identity-and-discover" class="section-name selfRef">Agent Identity and Discovery</a>
+      </h2>
+<div id="agent-identity-model">
+<section id="section-5.1">
+        <h3 id="name-agent-identity-model">
+<a href="#section-5.1" class="section-number selfRef">5.1. </a><a href="#name-agent-identity-model" class="section-name selfRef">Agent Identity Model</a>
+        </h3>
+<p id="section-5.1-1">PACE authenticates agents independently of the users they represent.
+This enables independent revocation, capability-scoped permissions,
+audit trails for agent actions, and delegation chains.<a href="#section-5.1-1" class="pilcrow">¶</a></p>
+<div id="agent-identity-token">
+<section id="section-5.1.1">
+          <h4 id="name-agent-identity-token">
+<a href="#section-5.1.1" class="section-number selfRef">5.1.1. </a><a href="#name-agent-identity-token" class="section-name selfRef">Agent Identity Token</a>
+          </h4>
+<p id="section-5.1.1-1">Each agent presents an identity token during session establishment.
+The token format is based on JWT <span>[<a href="#RFC7519" class="cite xref">RFC7519</a>]</span> with agent-specific claims:<a href="#section-5.1.1-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-3">
+            <caption><a href="#table-3" class="selfRef">Table 3</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">Claim</th>
+                <th class="text-left" rowspan="1" colspan="1">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>agent-id</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Globally unique agent identifier (UUID)</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>issuer</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Identity provider that issued the token</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>subject</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">User or organization the agent serves</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>capabilities</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Agent capability descriptors</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>scopes</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Authorized operation scopes</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>issued-at</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Token issuance timestamp</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>expires-at</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Token expiration timestamp</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>delegation-chain</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Parent agent references (see below)</td>
+              </tr>
+            </tbody>
+          </table>
+<p id="section-5.1.1-3">The token is cryptographically signed by the issuing authority.
+Agents <span class="bcp14">MAY</span> use the SD-JWT based identity mechanism defined in
+<span>[<a href="#SD-AGENT" class="cite xref">SD-AGENT</a>]</span> to support selective disclosure of identity attributes
+during session establishment.<a href="#section-5.1.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="delegation-chains">
+<section id="section-5.1.2">
+          <h4 id="name-delegation-chains">
+<a href="#section-5.1.2" class="section-number selfRef">5.1.2. </a><a href="#name-delegation-chains" class="section-name selfRef">Delegation Chains</a>
+          </h4>
+<p id="section-5.1.2-1">When an agent acts on behalf of another agent, the identity token
+includes a <code>delegation-chain</code> field tracing the authorization path
+(e.g., User → Coordinator → Researcher → Tool). Each entry records
+the granting agent and the scope granted. Receiving agents verify
+the complete chain to ensure each link has appropriate authorization.<a href="#section-5.1.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="agent-discovery">
+<section id="section-5.2">
+        <h3 id="name-agent-discovery">
+<a href="#section-5.2" class="section-number selfRef">5.2. </a><a href="#name-agent-discovery" class="section-name selfRef">Agent Discovery</a>
+        </h3>
+<p id="section-5.2-1">Agent discovery uses MOQT's namespace operations to find agents and
+follow their activity. Discovery operates on the Agent Namespace scope
+defined in <a href="#namespace" class="auto internal xref">Section 3.1</a>. Each agent is identified by a globally unique
+agent-id (UUID), verifiable via the Agent Card (see <a href="#agent-card" class="auto internal xref">Section 5.2.3</a>).<a href="#section-5.2-1" class="pilcrow">¶</a></p>
+<div id="phase-1-discovering-agents-on-the-network">
+<section id="section-5.2.1">
+          <h4 id="name-phase-1-discovering-agents-">
+<a href="#section-5.2.1" class="section-number selfRef">5.2.1. </a><a href="#name-phase-1-discovering-agents-" class="section-name selfRef">Phase 1: Discovering Agents on the Network</a>
+          </h4>
+<ol start="1" type="1" class="normal type-1" id="section-5.2.1-1">
+<li id="section-5.2.1-1.1">
+              <p id="section-5.2.1-1.1.1">Each agent announces its presence by issuing PUBLISH_NAMESPACE on
+<code>("pace","agents",{agent-id})</code>.<a href="#section-5.2.1-1.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li id="section-5.2.1-1.2">
+              <p id="section-5.2.1-1.2.1">Agents discover peers by issuing SUBSCRIBE_NAMESPACE on the common
+prefix <code>("pace","agents")</code>.<a href="#section-5.2.1-1.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li id="section-5.2.1-1.3">
+              <p id="section-5.2.1-1.3.1">The relay sends NAMESPACE messages to subscribers for each matching
+PUBLISH_NAMESPACE, enabling agents to learn about each other without
+prior knowledge.<a href="#section-5.2.1-1.3.1" class="pilcrow">¶</a></p>
+</li>
+          </ol>
+<p id="section-5.2.1-2">If an agent-id is known out-of-band (e.g., from a registry or URL),
+agents <span class="bcp14">MAY</span> skip Phase 1 and proceed directly to Phase 2.<a href="#section-5.2.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="phase-2-following-an-agent">
+<section id="section-5.2.2">
+          <h4 id="name-phase-2-following-an-agent">
+<a href="#section-5.2.2" class="section-number selfRef">5.2.2. </a><a href="#name-phase-2-following-an-agent" class="section-name selfRef">Phase 2: Following an Agent</a>
+          </h4>
+<p id="section-5.2.2-1">Once Agent B knows Agent A's namespace prefix, B issues SUBSCRIBE_TRACKS
+on <code>("pace","agents","agent-a")</code>. This establishes an ongoing
+relationship where the relay forwards all PUBLISH messages from A that
+match this prefix — including A's Agent Card and any future session
+tracks A creates.<a href="#section-5.2.2-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-5.2.2-2">
+<li id="section-5.2.2-2.1">
+              <p id="section-5.2.2-2.1.1">B issues SUBSCRIBE_TRACKS on <code>("pace","agents","agent-a")</code>.<a href="#section-5.2.2-2.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li id="section-5.2.2-2.2">
+              <p id="section-5.2.2-2.2.1">The relay forwards A's PUBLISH for the <code>"card"</code> track to B.<a href="#section-5.2.2-2.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li id="section-5.2.2-2.3">
+              <p id="section-5.2.2-2.3.1">B accepts the PUBLISH — this implicitly subscribes B to the card
+track and B receives A's Agent Card objects.<a href="#section-5.2.2-2.3.1" class="pilcrow">¶</a></p>
+</li>
+            <li id="section-5.2.2-2.4">
+              <p id="section-5.2.2-2.4.1">When A later publishes session tracks under
+<code>("pace","agents","agent-a",{session-id})</code>, the relay automatically
+forwards those PUBLISH messages to B (prefix match), enabling B to
+discover and join sessions without any explicit notification mechanism.<a href="#section-5.2.2-2.4.1" class="pilcrow">¶</a></p>
+</li>
+          </ol>
+<p id="section-5.2.2-3">A does the same for B by issuing SUBSCRIBE_TRACKS on
+<code>("pace","agents","agent-b")</code>.<a href="#section-5.2.2-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="agent-card">
+<section id="section-5.2.3">
+          <h4 id="name-agent-card">
+<a href="#section-5.2.3" class="section-number selfRef">5.2.3. </a><a href="#name-agent-card" class="section-name selfRef">Agent Card</a>
+          </h4>
+<p id="section-5.2.3-1">Each agent publishes an Agent Card on track <code>"card"</code> under its namespace
+<code>("pace","agents",{agent-id})</code>. When capabilities change, the agent
+publishes a new object (incrementing the group). Receivers <span class="bcp14">SHOULD</span> verify
+the card's signature and expiration before acting on its claims.<a href="#section-5.2.3-1" class="pilcrow">¶</a></p>
+<p id="section-5.2.3-2">All Agent Cards <span class="bcp14">MUST</span> include:<a href="#section-5.2.3-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.2.3-3.1">
+              <p id="section-5.2.3-3.1.1">Agent identifier (UUID) and display name<a href="#section-5.2.3-3.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.2.3-3.2">
+              <p id="section-5.2.3-3.2.1">Supported modalities and protocols<a href="#section-5.2.3-3.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.2.3-3.3">
+              <p id="section-5.2.3-3.3.1">Authentication schemes<a href="#section-5.2.3-3.3.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.2.3-3.4">
+              <p id="section-5.2.3-3.4.1">Identity claims (issuer, public key, expiration)<a href="#section-5.2.3-3.4.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+<p id="section-5.2.3-4">The card format is protocol-specific. For A2A agents, see
+<a href="#a2a-agent-card" class="auto internal xref">Section 8.2.6</a>. Agent Cards <span class="bcp14">MAY</span> use selective disclosure
+<span>[<a href="#SD-AGENT" class="cite xref">SD-AGENT</a>]</span> to reveal only claims necessary for a given interaction.<a href="#section-5.2.3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+</section>
+</div>
+<div id="data-exchange">
+<section id="section-6">
+      <h2 id="name-multi-modal-data-exchange">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-multi-modal-data-exchange" class="section-name selfRef">Multi-Modal Data Exchange</a>
+      </h2>
+<p id="section-6-1">PACE supports concurrent exchange of multiple data modalities within a
+single session, each with appropriate quality of service.<a href="#section-6-1" class="pilcrow">¶</a></p>
+<div id="modality-types">
+<section id="section-6.1">
+        <h3 id="name-modality-types">
+<a href="#section-6.1" class="section-number selfRef">6.1. </a><a href="#name-modality-types" class="section-name selfRef">Modality Types</a>
+        </h3>
+<p id="section-6.1-1">PACE defines the following data modality classes:<a href="#section-6.1-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-4">
+          <caption><a href="#table-4" class="selfRef">Table 4</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Modality</th>
+              <th class="text-left" rowspan="1" colspan="1">Latency</th>
+              <th class="text-left" rowspan="1" colspan="1">Examples</th>
+              <th class="text-left" rowspan="1" colspan="1">Delivery</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Real-time</td>
+              <td class="text-left" rowspan="1" colspan="1">&lt; 100ms</td>
+              <td class="text-left" rowspan="1" colspan="1">Voice, video, screen share</td>
+              <td class="text-left" rowspan="1" colspan="1">Continuous stream</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Semi-real-time</td>
+              <td class="text-left" rowspan="1" colspan="1">&lt; 1s</td>
+              <td class="text-left" rowspan="1" colspan="1">Chat messages, streaming LLM output</td>
+              <td class="text-left" rowspan="1" colspan="1">Ordered objects</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Non-real-time</td>
+              <td class="text-left" rowspan="1" colspan="1">Best effort</td>
+              <td class="text-left" rowspan="1" colspan="1">Tool calls, file transfers, context</td>
+              <td class="text-left" rowspan="1" colspan="1">Reliable delivery</td>
+            </tr>
+          </tbody>
+        </table>
+</section>
+</div>
+<div id="channel-architecture">
+<section id="section-6.2">
+        <h3 id="name-channel-architecture">
+<a href="#section-6.2" class="section-number selfRef">6.2. </a><a href="#name-channel-architecture" class="section-name selfRef">Channel Architecture</a>
+        </h3>
+<p id="section-6.2-1">Each modality maps to dedicated MOQT tracks within the Session
+Communication Namespace (<a href="#namespace" class="auto internal xref">Section 3.1</a>). Different modalities are
+isolated by track name while sharing session context and authorization.<a href="#section-6.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="priority-and-quality-of-service">
+<section id="section-6.3">
+        <h3 id="name-priority-and-quality-of-ser">
+<a href="#section-6.3" class="section-number selfRef">6.3. </a><a href="#name-priority-and-quality-of-ser" class="section-name selfRef">Priority and Quality of Service</a>
+        </h3>
+<p id="section-6.3-1">MOQT's 0-255 priority scale enables differentiated treatment of messages
+based on urgency and modality. PACE defines the following priority tiers:<a href="#section-6.3-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-5">
+          <caption><a href="#table-5" class="selfRef">Table 5</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Priority Range</th>
+              <th class="text-left" rowspan="1" colspan="1">Category</th>
+              <th class="text-left" rowspan="1" colspan="1">Use</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">0-15</td>
+              <td class="text-left" rowspan="1" colspan="1">Critical Control</td>
+              <td class="text-left" rowspan="1" colspan="1">Session termination, emergency cancel</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">16-31</td>
+              <td class="text-left" rowspan="1" colspan="1">Urgent Control</td>
+              <td class="text-left" rowspan="1" colspan="1">Error notifications, auth revocation</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">32-63</td>
+              <td class="text-left" rowspan="1" colspan="1">Real-time Media</td>
+              <td class="text-left" rowspan="1" colspan="1">Voice/video frames</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">64-95</td>
+              <td class="text-left" rowspan="1" colspan="1">Interactive</td>
+              <td class="text-left" rowspan="1" colspan="1">Chat messages, streaming LLM tokens</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">96-127</td>
+              <td class="text-left" rowspan="1" colspan="1">Standard Operations</td>
+              <td class="text-left" rowspan="1" colspan="1">Tool calls, request/response</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">128-159</td>
+              <td class="text-left" rowspan="1" colspan="1">Discovery</td>
+              <td class="text-left" rowspan="1" colspan="1">Capability cards, agent advertisements</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">160-191</td>
+              <td class="text-left" rowspan="1" colspan="1">Background</td>
+              <td class="text-left" rowspan="1" colspan="1">Telemetry, non-critical notifications</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">192-255</td>
+              <td class="text-left" rowspan="1" colspan="1">Bulk Transfer</td>
+              <td class="text-left" rowspan="1" colspan="1">File transfers, context exchange</td>
+            </tr>
+          </tbody>
+        </table>
+</section>
+</div>
+<div id="request-response">
+<section id="section-6.4">
+        <h3 id="name-request-response-pattern">
+<a href="#section-6.4" class="section-number selfRef">6.4. </a><a href="#name-request-response-pattern" class="section-name selfRef">Request/Response Pattern</a>
+        </h3>
+<p id="section-6.4-1">Request/response interactions use coordinated publish operations.
+Agent A publishes a request object on its own track
+<code>("pace","agents","agent-a",{sid}) -- "ops/{req-id}"</code>. Agent B, which
+has subscribed to A's session namespace, receives the request, processes
+it, and publishes the response on its own corresponding track
+<code>("pace","agents","agent-b",{sid}) -- "ops/{req-id}"</code>. Agent A receives
+the response through its subscription to B's session namespace.<a href="#section-6.4-1" class="pilcrow">¶</a></p>
+<p id="section-6.4-2">For a detailed example of request/response over MOQT tracks, see
+<span>[<a href="#MCP-MOQT" class="cite xref">MCP-MOQT</a>]</span> which defines this pattern for MCP tool invocations.<a href="#section-6.4-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="streaming">
+<section id="section-6.5">
+        <h3 id="name-streaming-pattern">
+<a href="#section-6.5" class="section-number selfRef">6.5. </a><a href="#name-streaming-pattern" class="section-name selfRef">Streaming Pattern</a>
+        </h3>
+<p id="section-6.5-1">Long-running operations produce incremental results as MOQT objects
+organized into groups representing execution phases. The server advances
+to a new group at each phase transition (e.g., initialization, progress,
+completion). Multiple objects within a group represent incremental data
+for that phase.<a href="#section-6.5-1" class="pilcrow">¶</a></p>
+<p id="section-6.5-2">Late-joining subscribers receive the latest complete group from relay
+cache, enabling mid-operation catch-up without replaying the full
+history.<a href="#section-6.5-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="real-time-media-exchange">
+<section id="section-6.6">
+        <h3 id="name-real-time-media-exchange">
+<a href="#section-6.6" class="section-number selfRef">6.6. </a><a href="#name-real-time-media-exchange" class="section-name selfRef">Real-Time Media Exchange</a>
+        </h3>
+<p id="section-6.6-1">Audio and video streams use dedicated tracks (<code>"audio"</code>, <code>"video"</code>)
+with descending group order (newest-first) and high priority (32-63),
+ensuring media frames preempt lower-priority data under congestion.<a href="#section-6.6-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="topologies">
+<section id="section-7">
+      <h2 id="name-communication-topologies">
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-communication-topologies" class="section-name selfRef">Communication Topologies</a>
+      </h2>
+<p id="section-7-1">PACE supports multiple communication topologies through MOQT's relay
+fan-out:<a href="#section-7-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-7-2">
+        <dt id="section-7-2.1">Point-to-Point:</dt>
+        <dd style="margin-left: 1.5em" id="section-7-2.2">
+          <p id="section-7-2.2.1">Two agents publish and subscribe to each other's session tracks.
+Used for tool invocation, task delegation, and bilateral collaboration.<a href="#section-7-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-7-2.3">Point-to-Multipoint (Fan-Out):</dt>
+        <dd style="margin-left: 1.5em" id="section-7-2.4">
+          <p id="section-7-2.4.1">One agent publishes; multiple agents subscribe. The relay handles
+fan-out without the publisher maintaining per-subscriber state.
+Used for broadcast notifications and shared context distribution.<a href="#section-7-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-7-2.5">Multi-Party:</dt>
+        <dd style="margin-left: 1.5em" id="section-7-2.6">
+          <p id="section-7-2.6.1">All participants publish on their own tracks and subscribe to
+each other's tracks within the same session-id. Adding a
+participant requires publishing SESSION_JOIN on the control track;
+existing participants receive the notification and subscribe to
+the new agent's session namespace.<a href="#section-7-2.6.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-7-2.7">Hierarchical Teams:</dt>
+        <dd style="margin-left: 1.5em" id="section-7-2.8">
+          <p id="section-7-2.8.1">A coordinator creates child PACE sessions to delegate subtasks.
+Each level operates as a separate session with narrowed authorization
+scope. Delegation chains (<a href="#identity-discovery" class="auto internal xref">Section 5</a>) maintain an
+auditable path from the original user authorization.<a href="#section-7-2.8.1" class="pilcrow">¶</a></p>
+</dd>
+      <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="protocol-bindings">
+<section id="section-8">
+      <h2 id="name-protocol-bindings">
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-protocol-bindings" class="section-name selfRef">Protocol Bindings</a>
+      </h2>
+<p id="section-8-1">This section defines protocol bindings that map application protocol
+semantics to MOQT. Each binding operates within PACE sessions, using
+the Session Communication Namespace (<a href="#namespace" class="auto internal xref">Section 3.1</a>) and channel
+architecture (<a href="#data-exchange" class="auto internal xref">Section 6</a>).<a href="#section-8-1" class="pilcrow">¶</a></p>
+<div id="binding-architecture">
+<section id="section-8.1">
+        <h3 id="name-binding-architecture">
+<a href="#section-8.1" class="section-number selfRef">8.1. </a><a href="#name-binding-architecture" class="section-name selfRef">Binding Architecture</a>
+        </h3>
+<p id="section-8.1-1">Protocol bindings sit between application protocols and the PACE session
+layer. Each binding defines:<a href="#section-8.1-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-8.1-2.1">
+            <p id="section-8.1-2.1.1"><strong>Protocol Identifier</strong>: Unique string used as the track name prefix<a href="#section-8.1-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-8.1-2.2">
+            <p id="section-8.1-2.2.1"><strong>Namespace Pattern</strong>: How operations map to track names<a href="#section-8.1-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-8.1-2.3">
+            <p id="section-8.1-2.3.1"><strong>Message Serialization</strong>: Encoding within MOQT object payloads<a href="#section-8.1-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-8.1-2.4">
+            <p id="section-8.1-2.4.1"><strong>Operation Mapping</strong>: Protocol operations to MOQT primitives<a href="#section-8.1-2.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-8.1-2.5">
+            <p id="section-8.1-2.5.1"><strong>Priority Mapping</strong>: Message types to PACE priority tiers<a href="#section-8.1-2.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-8.1-3">Protocols use distinct track name prefixes within PACE sessions:<a href="#section-8.1-3" class="pilcrow">¶</a></p>
+<table class="center" id="table-6">
+          <caption><a href="#table-6" class="selfRef">Table 6</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Protocol</th>
+              <th class="text-left" rowspan="1" colspan="1">Track Prefix</th>
+              <th class="text-left" rowspan="1" colspan="1">Example Full Path</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">A2A</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>a2a/</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>("pace","agents","agent-a","s1") -- "a2a/task/t1"</code>
+</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">MCP</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>mcp/</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>("pace","agents","fs-server","s1") -- "mcp/tools/read"</code>
+</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">AutoGen</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>autogen/</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>("pace","agents","rt1","s1") -- "autogen/message/conv1"</code>
+</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Generic</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>ext/{proto}/</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>("pace","agents","agent-a","s1") -- "ext/myproto/rpc/call"</code>
+</td>
+            </tr>
+          </tbody>
+        </table>
+</section>
+</div>
+<div id="a2a-binding">
+<section id="section-8.2">
+        <h3 id="name-a2a-binding">
+<a href="#section-8.2" class="section-number selfRef">8.2. </a><a href="#name-a2a-binding" class="section-name selfRef">A2A Binding</a>
+        </h3>
+<p id="section-8.2-1">The Agent-to-Agent Protocol <span>[<a href="#A2A" class="cite xref">A2A</a>]</span> binding maps A2A task delegation
+and collaboration to MOQT primitives using the <code>a2a/</code> category prefix.<a href="#section-8.2-1" class="pilcrow">¶</a></p>
+<div id="namespace-structure">
+<section id="section-8.2.1">
+          <h4 id="name-namespace-structure">
+<a href="#section-8.2.1" class="section-number selfRef">8.2.1. </a><a href="#name-namespace-structure" class="section-name selfRef">Namespace Structure</a>
+          </h4>
+<p id="section-8.2.1-1">A2A operates within a PACE session. Each agent publishes A2A messages
+on tracks under its own session namespace:<a href="#section-8.2.1-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-8.2.1-2">
+<pre>
+Namespace: ("pace", "agents", {agent-id}, {session-id})
+Tracks:    "a2a/{subcategory}/{identifier}"
+</pre><a href="#section-8.2.1-2" class="pilcrow">¶</a>
+</div>
+<p id="section-8.2.1-3">A2A track name patterns:<a href="#section-8.2.1-3" class="pilcrow">¶</a></p>
+<table class="center" id="table-7">
+            <caption><a href="#table-7" class="selfRef">Table 7</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">Track Pattern</th>
+                <th class="text-left" rowspan="1" colspan="1">Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/request/{request-id}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Outbound requests</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/response/{request-id}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Request responses</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/stream/{request-id}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Streaming operations</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/task/{task-id}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Task lifecycle</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/notify/{type}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Push notifications</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+<div id="a2a-operation-mapping">
+<section id="section-8.2.2">
+          <h4 id="name-a2a-operation-mapping">
+<a href="#section-8.2.2" class="section-number selfRef">8.2.2. </a><a href="#name-a2a-operation-mapping" class="section-name selfRef">A2A Operation Mapping</a>
+          </h4>
+<p id="section-8.2.2-1">The following table maps A2A v0.3.0 operations to MOQT primitives:<a href="#section-8.2.2-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-8">
+            <caption><a href="#table-8" class="selfRef">Table 8</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">A2A Operation</th>
+                <th class="text-left" rowspan="1" colspan="1">MOQT Mechanism</th>
+                <th class="text-left" rowspan="1" colspan="1">Track Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>SendMessage</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">PUBLISH + OBJECT</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/request/{req-id}</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>SendStreamingMessage</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">PUBLISH + multiple OBJECTs</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/stream/{req-id}</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>GetTask</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">SUBSCRIBE + OBJECT</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/task/{task-id}</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>ListTasks</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">SUBSCRIBE_NAMESPACE</td>
+                <td class="text-left" rowspan="1" colspan="1">(discover <code>a2a/task/*</code> tracks)</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>CancelTask</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">OBJECT on ctrl track</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>ctrl</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>SubscribeToTask</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">SUBSCRIBE (ongoing)</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/task/{task-id}</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>GetExtendedAgentCard</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">SUBSCRIBE + OBJECT</td>
+                <td class="text-left" rowspan="1" colspan="1">Agent's <code>card</code> track</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>SetPushNotificationConfig</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">PUBLISH + OBJECT</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/notify/config</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>GetPushNotificationConfig</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">SUBSCRIBE + OBJECT</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>a2a/notify/config</code>
+</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+<div id="message-format">
+<section id="section-8.2.3">
+          <h4 id="name-message-format">
+<a href="#section-8.2.3" class="section-number selfRef">8.2.3. </a><a href="#name-message-format" class="section-name selfRef">Message Format</a>
+          </h4>
+<p id="section-8.2.3-1">A2A messages are serialized as JSON-RPC 2.0 within MOQT objects,
+preserving A2A's native format. The PACE envelope wraps the JSON bytes:<a href="#section-8.2.3-1" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-8.2.3-2">
+<pre>
+{
+  "jsonrpc": "2.0",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "role": "user",
+      "parts": [{"kind": "text", "text": "Hello agent"}]
+    }
+  },
+  "id": "req-001"
+}
+</pre><a href="#section-8.2.3-2" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="priority-mapping">
+<section id="section-8.2.4">
+          <h4 id="name-priority-mapping">
+<a href="#section-8.2.4" class="section-number selfRef">8.2.4. </a><a href="#name-priority-mapping" class="section-name selfRef">Priority Mapping</a>
+          </h4>
+<table class="center" id="table-9">
+            <caption><a href="#table-9" class="selfRef">Table 9</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">A2A Message Type</th>
+                <th class="text-left" rowspan="1" colspan="1">MOQT Priority Range</th>
+                <th class="text-left" rowspan="1" colspan="1">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Cancel/Error</td>
+                <td class="text-left" rowspan="1" colspan="1">0-31</td>
+                <td class="text-left" rowspan="1" colspan="1">Task cancellation, critical errors</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">SendMessage response</td>
+                <td class="text-left" rowspan="1" colspan="1">32-63</td>
+                <td class="text-left" rowspan="1" colspan="1">Responses requiring immediate delivery</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">SendMessage request</td>
+                <td class="text-left" rowspan="1" colspan="1">64-95</td>
+                <td class="text-left" rowspan="1" colspan="1">Normal request messages</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Task status updates</td>
+                <td class="text-left" rowspan="1" colspan="1">96-127</td>
+                <td class="text-left" rowspan="1" colspan="1">Incremental task state changes</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Streaming artifacts</td>
+                <td class="text-left" rowspan="1" colspan="1">96-127</td>
+                <td class="text-left" rowspan="1" colspan="1">Streaming result data</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Discovery (Agent Card)</td>
+                <td class="text-left" rowspan="1" colspan="1">128-159</td>
+                <td class="text-left" rowspan="1" colspan="1">Agent card exchange</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Push notifications</td>
+                <td class="text-left" rowspan="1" colspan="1">160-191</td>
+                <td class="text-left" rowspan="1" colspan="1">Asynchronous notifications</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Background/bulk</td>
+                <td class="text-left" rowspan="1" colspan="1">192-255</td>
+                <td class="text-left" rowspan="1" colspan="1">Large file transfers, batch ops</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+<div id="streaming-support">
+<section id="section-8.2.5">
+          <h4 id="name-streaming-support">
+<a href="#section-8.2.5" class="section-number selfRef">8.2.5. </a><a href="#name-streaming-support" class="section-name selfRef">Streaming Support</a>
+          </h4>
+<p id="section-8.2.5-1">A2A streaming operations (SendStreamingMessage, task subscriptions) use
+the streaming pattern defined in <a href="#streaming" class="auto internal xref">Section 6.5</a>. A2A streaming events map
+to MOQT objects as follows:<a href="#section-8.2.5-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-8.2.5-2.1">
+              <p id="section-8.2.5-2.1.1">Each streaming response creates a new MOQT group<a href="#section-8.2.5-2.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-8.2.5-2.2">
+              <p id="section-8.2.5-2.2.1">TaskStatusUpdateEvent (state changes) and TaskArtifactUpdateEvent
+(output data) are individual objects within groups<a href="#section-8.2.5-2.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-8.2.5-2.3">
+              <p id="section-8.2.5-2.3.1">Groups represent execution phases (initialization, progress, completion)<a href="#section-8.2.5-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+</section>
+</div>
+<div id="a2a-agent-card">
+<section id="section-8.2.6">
+          <h4 id="name-a2a-agent-card-with-moqt-ex">
+<a href="#section-8.2.6" class="section-number selfRef">8.2.6. </a><a href="#name-a2a-agent-card-with-moqt-ex" class="section-name selfRef">A2A Agent Card with MOQT Extension</a>
+          </h4>
+<p id="section-8.2.6-1">When operating over PACE, the A2A Agent Card includes a <code>moqt</code> extension
+block:<a href="#section-8.2.6-1" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-8.2.6-2">
+<pre>
+{
+  "name": "research-assistant",
+  "protocolVersion": "0.3.0",
+  "capabilities": {"streaming": true, "pushNotifications": true},
+  "skills": [{"id": "web-research", "name": "Web Research"}],
+  "authentication": {"schemes": ["bearer", "oauth2"]},
+  "moqt": {
+    "relayEndpoint": "moqt://relay.example.com:4443",
+    "webTransportEndpoint": "https://relay.example.com:4443/moqt",
+    "namespace": ["pace", "agents", "research-assistant"],
+    "supportedExtensions": ["pace-v1"],
+    "maxConcurrentSubscriptions": 100,
+    "cacheTTL": 300
+  },
+  "signature": "base64-encoded-ed25519-signature"
+}
+</pre><a href="#section-8.2.6-2" class="pilcrow">¶</a>
+</div>
+<p id="section-8.2.6-3">The <code>moqt</code> extension fields:<a href="#section-8.2.6-3" class="pilcrow">¶</a></p>
+<table class="center" id="table-10">
+            <caption><a href="#table-10" class="selfRef">Table 10</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">Field</th>
+                <th class="text-left" rowspan="1" colspan="1">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>relayEndpoint</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Native QUIC endpoint for the MOQT relay</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>webTransportEndpoint</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">WebTransport endpoint (alternative connectivity)</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>namespace</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Agent's namespace prefix as array</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>supportedExtensions</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">MOQT/PACE extensions supported</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>maxConcurrentSubscriptions</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Maximum subscriptions the agent handles</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>cacheTTL</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Cache duration for the agent card (seconds)</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+</section>
+</div>
+<div id="mcp-binding">
+<section id="section-8.3">
+        <h3 id="name-mcp-binding">
+<a href="#section-8.3" class="section-number selfRef">8.3. </a><a href="#name-mcp-binding" class="section-name selfRef">MCP Binding</a>
+        </h3>
+<p id="section-8.3-1">The Model Context Protocol <span>[<a href="#MCP" class="cite xref">MCP</a>]</span> binding enables tool and resource
+access for agents. Within a PACE session, MCP tracks use the <code>"mcp/"</code>
+prefix under the agent's session namespace:<a href="#section-8.3-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-8.3-2">
+<pre>
+Namespace: ("pace", "agents", {server-id}, {session-id})
+Tracks:    "mcp/{subcategory}/{identifier}"
+</pre><a href="#section-8.3-2" class="pilcrow">¶</a>
+</div>
+<p id="section-8.3-3">The complete MCP over MOQT specification — including track structure,
+operation mapping, message serialization, Agent Skills architecture,
+and relay support — is defined in <span>[<a href="#MCP-MOQT" class="cite xref">MCP-MOQT</a>]</span>. PACE adopts that
+specification's track semantics, mapping its namespace tuples (e.g.,
+<code>(mcp, {session-id}, tools) -- ({tool-name})</code>) into PACE track names
+(e.g., <code>"mcp/tools/{tool-name}"</code>) as described in <a href="#namespace" class="auto internal xref">Section 3.1</a>.<a href="#section-8.3-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="autogen-binding">
+<section id="section-8.4">
+        <h3 id="name-autogen-binding">
+<a href="#section-8.4" class="section-number selfRef">8.4. </a><a href="#name-autogen-binding" class="section-name selfRef">AutoGen Binding</a>
+        </h3>
+<p id="section-8.4-1">AutoGen <span>[<a href="#AutoGen" class="cite xref">AutoGen</a>]</span> is a multi-agent conversation framework. This
+binding maps AutoGen's conversation patterns to MOQT within PACE
+sessions.<a href="#section-8.4-1" class="pilcrow">¶</a></p>
+<div id="namespace-structure-1">
+<section id="section-8.4.1">
+          <h4 id="name-namespace-structure-2">
+<a href="#section-8.4.1" class="section-number selfRef">8.4.1. </a><a href="#name-namespace-structure-2" class="section-name selfRef">Namespace Structure</a>
+          </h4>
+<div class="alignLeft art-text artwork" id="section-8.4.1-1">
+<pre>
+Namespace: ("pace", "agents", {runtime-id}, {session-id})
+Tracks:    "autogen/{subcategory}/{identifier}"
+</pre><a href="#section-8.4.1-1" class="pilcrow">¶</a>
+</div>
+<p id="section-8.4.1-2">Where <code>runtime-id</code> is the AutoGen runtime instance identifier.<a href="#section-8.4.1-2" class="pilcrow">¶</a></p>
+<table class="center" id="table-11">
+            <caption><a href="#table-11" class="selfRef">Table 11</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">Track Pattern</th>
+                <th class="text-left" rowspan="1" colspan="1">Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>autogen/message/{conversation-id}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Inter-agent messages</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>autogen/control/{command}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Runtime control</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>autogen/state/{state-key}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Agent state sync</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>autogen/result/{task-id}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Final outputs</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+<div id="message-format-1">
+<section id="section-8.4.2">
+          <h4 id="name-message-format-2">
+<a href="#section-8.4.2" class="section-number selfRef">8.4.2. </a><a href="#name-message-format-2" class="section-name selfRef">Message Format</a>
+          </h4>
+<p id="section-8.4.2-1">AutoGen messages are serialized as JSON with the following structure:<a href="#section-8.4.2-1" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-8.4.2-2">
+<pre>
+{
+  "sender": "agent-name",
+  "recipient": "agent-name | broadcast",
+  "content": "message content or structured data",
+  "metadata": {
+    "conversation_id": "conv-123",
+    "turn": 5,
+    "role": "assistant | user | system"
+  }
+}
+</pre><a href="#section-8.4.2-2" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="conversation-patterns">
+<section id="section-8.4.3">
+          <h4 id="name-conversation-patterns">
+<a href="#section-8.4.3" class="section-number selfRef">8.4.3. </a><a href="#name-conversation-patterns" class="section-name selfRef">Conversation Patterns</a>
+          </h4>
+<p id="section-8.4.3-1">AutoGen's conversation patterns map to MOQT as follows:<a href="#section-8.4.3-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-8.4.3-2">
+            <dt id="section-8.4.3-2.1">Two-Agent Chat:</dt>
+            <dd style="margin-left: 1.5em" id="section-8.4.3-2.2">
+              <p id="section-8.4.3-2.2.1">Each agent publishes to their message track. Agents subscribe to
+their conversation partner's track.<a href="#section-8.4.3-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-8.4.3-2.3">Group Chat:</dt>
+            <dd style="margin-left: 1.5em" id="section-8.4.3-2.4">
+              <p id="section-8.4.3-2.4.1">A coordinator agent manages turn-taking. All agents subscribe to
+the coordinator's broadcast track.<a href="#section-8.4.3-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-8.4.3-2.5">Nested Chat:</dt>
+            <dd style="margin-left: 1.5em" id="section-8.4.3-2.6">
+              <p id="section-8.4.3-2.6.1">Hierarchical conversations use nested session-ids. An outer agent
+creates a child PACE session for the inner conversation, linking
+it to the parent via delegation chains.<a href="#section-8.4.3-2.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="priority-mapping-1">
+<section id="section-8.4.4">
+          <h4 id="name-priority-mapping-2">
+<a href="#section-8.4.4" class="section-number selfRef">8.4.4. </a><a href="#name-priority-mapping-2" class="section-name selfRef">Priority Mapping</a>
+          </h4>
+<table class="center" id="table-12">
+            <caption><a href="#table-12" class="selfRef">Table 12</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">AutoGen Message Type</th>
+                <th class="text-left" rowspan="1" colspan="1">MOQT Priority Range</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Termination signals</td>
+                <td class="text-left" rowspan="1" colspan="1">0-31</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Human input requests</td>
+                <td class="text-left" rowspan="1" colspan="1">32-63</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Agent responses</td>
+                <td class="text-left" rowspan="1" colspan="1">64-95</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Function results</td>
+                <td class="text-left" rowspan="1" colspan="1">96-127</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">State updates</td>
+                <td class="text-left" rowspan="1" colspan="1">128-159</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">Logging/debug</td>
+                <td class="text-left" rowspan="1" colspan="1">160-255</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+</section>
+</div>
+<div id="jsonrpc-binding">
+<section id="section-8.5">
+        <h3 id="name-generic-json-rpc-binding">
+<a href="#section-8.5" class="section-number selfRef">8.5. </a><a href="#name-generic-json-rpc-binding" class="section-name selfRef">Generic JSON-RPC Binding</a>
+        </h3>
+<p id="section-8.5-1">This binding provides a baseline for custom protocols using JSON-RPC 2.0
+messaging.<a href="#section-8.5-1" class="pilcrow">¶</a></p>
+<div id="namespace-structure-2">
+<section id="section-8.5.1">
+          <h4 id="name-namespace-structure-3">
+<a href="#section-8.5.1" class="section-number selfRef">8.5.1. </a><a href="#name-namespace-structure-3" class="section-name selfRef">Namespace Structure</a>
+          </h4>
+<div class="alignLeft art-text artwork" id="section-8.5.1-1">
+<pre>
+Namespace: ("pace", "agents", {agent-id}, {session-id})
+Tracks:    "ext/{protocol-name}/{subcategory}/{identifier}"
+</pre><a href="#section-8.5.1-1" class="pilcrow">¶</a>
+</div>
+<p id="section-8.5.1-2">Where <code>protocol-name</code> is the custom protocol identifier.<a href="#section-8.5.1-2" class="pilcrow">¶</a></p>
+<table class="center" id="table-13">
+            <caption><a href="#table-13" class="selfRef">Table 13</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">Track Pattern</th>
+                <th class="text-left" rowspan="1" colspan="1">Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>ext/{proto}/rpc/{request-id}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Request/response</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>ext/{proto}/stream/{stream-id}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Streaming data</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>ext/{proto}/event/{event-type}</code>
+</td>
+                <td class="text-left" rowspan="1" colspan="1">Async events</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+<div id="message-format-2">
+<section id="section-8.5.2">
+          <h4 id="name-message-format-3">
+<a href="#section-8.5.2" class="section-number selfRef">8.5.2. </a><a href="#name-message-format-3" class="section-name selfRef">Message Format</a>
+          </h4>
+<p id="section-8.5.2-1">Messages follow standard JSON-RPC 2.0:<a href="#section-8.5.2-1" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-8.5.2-2">
+<pre>
+{
+  "jsonrpc": "2.0",
+  "method": "protocol.method",
+  "params": {},
+  "id": "request-id"
+}
+</pre><a href="#section-8.5.2-2" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="extension-mechanism">
+<section id="section-8.5.3">
+          <h4 id="name-extension-mechanism">
+<a href="#section-8.5.3" class="section-number selfRef">8.5.3. </a><a href="#name-extension-mechanism" class="section-name selfRef">Extension Mechanism</a>
+          </h4>
+<p id="section-8.5.3-1">Custom protocols extend this binding by defining additional track
+subcategories, custom message schemas within JSON-RPC params,
+protocol-specific priorities, and custom MOQT extension headers.
+Implementations <span class="bcp14">SHOULD</span> document extensions and <span class="bcp14">MAY</span> register them
+in the IANA PACE Protocol Binding Registry.<a href="#section-8.5.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+</section>
+</div>
+<div id="authorization">
+<section id="section-9">
+      <h2 id="name-authorization-and-security">
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-authorization-and-security" class="section-name selfRef">Authorization and Security</a>
+      </h2>
+<div id="authorization-model">
+<section id="section-9.1">
+        <h3 id="name-authorization-model">
+<a href="#section-9.1" class="section-number selfRef">9.1. </a><a href="#name-authorization-model" class="section-name selfRef">Authorization Model</a>
+        </h3>
+<p id="section-9.1-1">PACE implements a behavior-driven authorization model where access
+tokens are scoped to specific operations an agent is permitted to
+perform.<a href="#section-9.1-1" class="pilcrow">¶</a></p>
+<div id="behavior-driven-scopes">
+<section id="section-9.1.1">
+          <h4 id="name-behavior-driven-scopes">
+<a href="#section-9.1.1" class="section-number selfRef">9.1.1. </a><a href="#name-behavior-driven-scopes" class="section-name selfRef">Behavior-Driven Scopes</a>
+          </h4>
+<p id="section-9.1.1-1">Scopes are structured as <code>{domain}:{resource}:{action}:{constraints}</code>,
+bound to specific agent behaviors rather than roles. Constraints
+support dynamic limits (time bounds, resource limits, counts).<a href="#section-9.1.1-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="delegated-authorization">
+<section id="section-9.1.2">
+          <h4 id="name-delegated-authorization">
+<a href="#section-9.1.2" class="section-number selfRef">9.1.2. </a><a href="#name-delegated-authorization" class="section-name selfRef">Delegated Authorization</a>
+          </h4>
+<p id="section-9.1.2-1">When agents invoke other agents, each delegation narrows the scope.
+Agent A (holding scope S) requests a sub-scope S' ⊂ S for Agent B.
+Agent B can further narrow to S'' ⊂ S' for downstream tools.
+Downstream agents cannot exceed their delegator's permissions.<a href="#section-9.1.2-1" class="pilcrow">¶</a></p>
+<p id="section-9.1.2-2">Authorization tokens are presented in SESSION_INIT and validated
+including the full delegation chain. Tokens are refreshed proactively
+before expiration.<a href="#section-9.1.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="confirmation-and-evidence">
+<section id="section-9.1.3">
+          <h4 id="name-confirmation-and-evidence">
+<a href="#section-9.1.3" class="section-number selfRef">9.1.3. </a><a href="#name-confirmation-and-evidence" class="section-name selfRef">Confirmation and Evidence</a>
+          </h4>
+<p id="section-9.1.3-1">For high-risk operations, PACE supports confirmation requirements
+where agents must present cryptographic evidence of approval (human,
+policy-check, or MFA) before the operation proceeds.<a href="#section-9.1.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="transport-security">
+<section id="section-9.2">
+        <h3 id="name-transport-security">
+<a href="#section-9.2" class="section-number selfRef">9.2. </a><a href="#name-transport-security" class="section-name selfRef">Transport Security</a>
+        </h3>
+<p id="section-9.2-1">All PACE communication is encrypted via TLS 1.3 (QUIC requirement).
+Agent identity tokens are cryptographically signed with short expiry.
+MOQT Common Access Tokens <span>[<a href="#MoQ-C4M" class="cite xref">MoQ-C4M</a>]</span> provide relay-level namespace
+authorization. Relay nodes cannot access payload content unless
+explicitly authorized as trusted intermediaries.<a href="#section-9.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="privacy-considerations">
+<section id="section-9.3">
+        <h3 id="name-privacy-considerations">
+<a href="#section-9.3" class="section-number selfRef">9.3. </a><a href="#name-privacy-considerations" class="section-name selfRef">Privacy Considerations</a>
+        </h3>
+<p id="section-9.3-1">Agents <span class="bcp14">SHOULD</span> minimize shared data to what is necessary for the task.
+Long-lived sessions <span class="bcp14">SHOULD</span> support forward secrecy through periodic
+key rotation. Relay operators <span class="bcp14">MUST NOT</span> retain content beyond
+operational necessity.<a href="#section-9.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="scalability">
+<section id="section-10">
+      <h2 id="name-scalability-and-reliability">
+<a href="#section-10" class="section-number selfRef">10. </a><a href="#name-scalability-and-reliability" class="section-name selfRef">Scalability and Reliability</a>
+      </h2>
+<p id="section-10-1">PACE inherits MOQT's relay architecture for geographic distribution
+and load management:<a href="#section-10-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-10-2.1">
+          <p id="section-10-2.1.1"><strong>Subscription Aggregation</strong>: Multiple subscribers to the same track
+result in a single upstream subscription, reducing origin load<a href="#section-10-2.1.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-10-2.2">
+          <p id="section-10-2.2.1"><strong>Geographic Locality</strong>: Edge relays cache content close to
+subscribers, minimizing round-trip latency<a href="#section-10-2.2.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-10-2.3">
+          <p id="section-10-2.3.1"><strong>Fault Isolation</strong>: Relay failures are localized; other paths
+continue operating<a href="#section-10-2.3.1" class="pilcrow">¶</a></p>
+</li>
+      </ul>
+<div id="failure-modes-and-recovery">
+<section id="section-10.1">
+        <h3 id="name-failure-modes-and-recovery">
+<a href="#section-10.1" class="section-number selfRef">10.1. </a><a href="#name-failure-modes-and-recovery" class="section-name selfRef">Failure Modes and Recovery</a>
+        </h3>
+<table class="center" id="table-14">
+          <caption><a href="#table-14" class="selfRef">Table 14</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Failure</th>
+              <th class="text-left" rowspan="1" colspan="1">Detection</th>
+              <th class="text-left" rowspan="1" colspan="1">Recovery</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Agent network loss</td>
+              <td class="text-left" rowspan="1" colspan="1">QUIC idle timeout</td>
+              <td class="text-left" rowspan="1" colspan="1">Connection migration, session resume</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Relay failure</td>
+              <td class="text-left" rowspan="1" colspan="1">Subscription timeout</td>
+              <td class="text-left" rowspan="1" colspan="1">Failover to alternate relay</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Agent crash</td>
+              <td class="text-left" rowspan="1" colspan="1">Session heartbeat miss</td>
+              <td class="text-left" rowspan="1" colspan="1">Session suspended, await resume</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Prolonged outage</td>
+              <td class="text-left" rowspan="1" colspan="1">Session timeout</td>
+              <td class="text-left" rowspan="1" colspan="1">Session closed, state checkpointed</td>
+            </tr>
+          </tbody>
+        </table>
+<p id="section-10.1-2">Session recovery mechanics are defined in <a href="#session-recovery" class="auto internal xref">Section 4.5</a>.<a href="#section-10.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="security-considerations">
+<section id="section-11">
+      <h2 id="name-security-considerations">
+<a href="#section-11" class="section-number selfRef">11. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
+      </h2>
+<p id="section-11-1">TODO<a href="#section-11-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="iana-considerations">
+<section id="section-12">
+      <h2 id="name-iana-considerations">
+<a href="#section-12" class="section-number selfRef">12. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
+      </h2>
+<div id="moqt-setup-parameter-registry">
+<section id="section-12.1">
+        <h3 id="name-moqt-setup-parameter-regist">
+<a href="#section-12.1" class="section-number selfRef">12.1. </a><a href="#name-moqt-setup-parameter-regist" class="section-name selfRef">MOQT Setup Parameter Registry</a>
+        </h3>
+<p id="section-12.1-1">This document requests registration of the following MOQT setup parameters:<a href="#section-12.1-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-15">
+          <caption><a href="#table-15" class="selfRef">Table 15</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Parameter Name</th>
+              <th class="text-left" rowspan="1" colspan="1">ID</th>
+              <th class="text-left" rowspan="1" colspan="1">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">pace-version</td>
+              <td class="text-left" rowspan="1" colspan="1">0x50414301</td>
+              <td class="text-left" rowspan="1" colspan="1">PACE protocol version</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">agent-identity</td>
+              <td class="text-left" rowspan="1" colspan="1">0x50414302</td>
+              <td class="text-left" rowspan="1" colspan="1">Agent identity token reference</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">supported-protocols</td>
+              <td class="text-left" rowspan="1" colspan="1">0x50414303</td>
+              <td class="text-left" rowspan="1" colspan="1">Application protocol bitmask</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">auth-schemes</td>
+              <td class="text-left" rowspan="1" colspan="1">0x50414304</td>
+              <td class="text-left" rowspan="1" colspan="1">Authentication scheme identifiers</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">session-capabilities</td>
+              <td class="text-left" rowspan="1" colspan="1">0x50414305</td>
+              <td class="text-left" rowspan="1" colspan="1">Session capability flags</td>
+            </tr>
+          </tbody>
+        </table>
+</section>
+</div>
+<div id="pace-protocol-binding-registry">
+<section id="section-12.2">
+        <h3 id="name-pace-protocol-binding-regis">
+<a href="#section-12.2" class="section-number selfRef">12.2. </a><a href="#name-pace-protocol-binding-regis" class="section-name selfRef">PACE Protocol Binding Registry</a>
+        </h3>
+<p id="section-12.2-1">IANA is requested to create a registry for PACE protocol bindings.
+Each entry contains:<a href="#section-12.2-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-12.2-2.1">
+            <p id="section-12.2-2.1.1">Protocol Identifier (string)<a href="#section-12.2-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-12.2-2.2">
+            <p id="section-12.2-2.2.1">Protocol Version<a href="#section-12.2-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-12.2-2.3">
+            <p id="section-12.2-2.3.1">Namespace Prefix Pattern<a href="#section-12.2-2.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-12.2-2.4">
+            <p id="section-12.2-2.4.1">Reference Document<a href="#section-12.2-2.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-12.2-3">Initial entries:<a href="#section-12.2-3" class="pilcrow">¶</a></p>
+<table class="center" id="table-16">
+          <caption><a href="#table-16" class="selfRef">Table 16</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Protocol ID</th>
+              <th class="text-left" rowspan="1" colspan="1">Version</th>
+              <th class="text-left" rowspan="1" colspan="1">Track Name Pattern</th>
+              <th class="text-left" rowspan="1" colspan="1">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">a2a</td>
+              <td class="text-left" rowspan="1" colspan="1">0.3.0</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>a2a/{sub}/{id}</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">mcp</td>
+              <td class="text-left" rowspan="1" colspan="1">2025-06-18</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>mcp/{sub}/{id}</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">autogen</td>
+              <td class="text-left" rowspan="1" colspan="1">0.4</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>autogen/{sub}/{id}</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">(generic)</td>
+              <td class="text-left" rowspan="1" colspan="1">-</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>ext/{proto}/{sub}/{id}</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+          </tbody>
+        </table>
+</section>
+</div>
+<div id="pace-message-type-registry">
+<section id="section-12.3">
+        <h3 id="name-pace-message-type-registry">
+<a href="#section-12.3" class="section-number selfRef">12.3. </a><a href="#name-pace-message-type-registry" class="section-name selfRef">PACE Message Type Registry</a>
+        </h3>
+<p id="section-12.3-1">IANA is requested to create a registry for PACE session control
+message types:<a href="#section-12.3-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-17">
+          <caption><a href="#table-17" class="selfRef">Table 17</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Message Type</th>
+              <th class="text-left" rowspan="1" colspan="1">Code</th>
+              <th class="text-left" rowspan="1" colspan="1">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_INIT</td>
+              <td class="text-left" rowspan="1" colspan="1">0x01</td>
+              <td class="text-left" rowspan="1" colspan="1">Initiate session establishment</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_ACCEPT</td>
+              <td class="text-left" rowspan="1" colspan="1">0x02</td>
+              <td class="text-left" rowspan="1" colspan="1">Accept session establishment</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_REJECT</td>
+              <td class="text-left" rowspan="1" colspan="1">0x03</td>
+              <td class="text-left" rowspan="1" colspan="1">Reject session establishment</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_UPDATE</td>
+              <td class="text-left" rowspan="1" colspan="1">0x04</td>
+              <td class="text-left" rowspan="1" colspan="1">Update session parameters</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_SUSPEND</td>
+              <td class="text-left" rowspan="1" colspan="1">0x05</td>
+              <td class="text-left" rowspan="1" colspan="1">Suspend active session</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_RESUME</td>
+              <td class="text-left" rowspan="1" colspan="1">0x06</td>
+              <td class="text-left" rowspan="1" colspan="1">Resume suspended session</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_CLOSE</td>
+              <td class="text-left" rowspan="1" colspan="1">0x07</td>
+              <td class="text-left" rowspan="1" colspan="1">Terminate session</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_JOIN</td>
+              <td class="text-left" rowspan="1" colspan="1">0x08</td>
+              <td class="text-left" rowspan="1" colspan="1">Join multi-party session</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">SESSION_LEAVE</td>
+              <td class="text-left" rowspan="1" colspan="1">0x09</td>
+              <td class="text-left" rowspan="1" colspan="1">Leave multi-party session</td>
+            </tr>
+          </tbody>
+        </table>
+</section>
+</div>
+</section>
+</div>
+<div id="sec-combined-references">
+<section id="section-13">
+      <h2 id="name-references">
+<a href="#section-13" class="section-number selfRef">13. </a><a href="#name-references" class="section-name selfRef">References</a>
+      </h2>
+<div id="sec-normative-references">
+<section id="section-13.1">
+        <h3 id="name-normative-references">
+<a href="#section-13.1" class="section-number selfRef">13.1. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+        </h3>
+<dl class="references">
+<dt id="MoQ-TRANSPORT">[MoQ-TRANSPORT]</dt>
+        <dd>
+<span class="refAuthor">Curley, L.</span>, <span class="refAuthor">Pugin, K.</span>, <span class="refAuthor">Nandakumar, S.</span>, <span class="refAuthor">Vasiliev, V.</span>, and <span class="refAuthor">I. Swett</span>, <span class="refTitle">"Media over QUIC Transport"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-ietf-moq-transport-16</span>, <time datetime="2026-01" class="refDate">January 2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-ietf-moq-transport/">https://datatracker.ietf.org/doc/draft-ietf-moq-transport/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC2119">[RFC2119]</dt>
+        <dd>
+<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 2119</span>, <span class="seriesInfo">DOI 10.17487/RFC2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc2119">https://www.rfc-editor.org/rfc/rfc2119</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8126">[RFC8126]</dt>
+        <dd>
+<span class="refAuthor">Cotton, M.</span>, <span class="refAuthor">Leiba, B.</span>, and <span class="refAuthor">T. Narten</span>, <span class="refTitle">"Guidelines for Writing an IANA Considerations Section in RFCs"</span>, <span class="seriesInfo">BCP 26</span>, <span class="seriesInfo">RFC 8126</span>, <span class="seriesInfo">DOI 10.17487/RFC8126</span>, <time datetime="2017-06" class="refDate">June 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8126">https://www.rfc-editor.org/rfc/rfc8126</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8174">[RFC8174]</dt>
+        <dd>
+<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 8174</span>, <span class="seriesInfo">DOI 10.17487/RFC8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8174">https://www.rfc-editor.org/rfc/rfc8174</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8446">[RFC8446]</dt>
+        <dd>
+<span class="refAuthor">Rescorla, E.</span>, <span class="refTitle">"The Transport Layer Security (TLS) Protocol Version 1.3"</span>, <span class="seriesInfo">RFC 8446</span>, <span class="seriesInfo">DOI 10.17487/RFC8446</span>, <time datetime="2018-08" class="refDate">August 2018</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8446">https://www.rfc-editor.org/rfc/rfc8446</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9000">[RFC9000]</dt>
+      <dd>
+<span class="refAuthor">Iyengar, J., Ed.</span> and <span class="refAuthor">M. Thomson, Ed.</span>, <span class="refTitle">"QUIC: A UDP-Based Multiplexed and Secure Transport"</span>, <span class="seriesInfo">RFC 9000</span>, <span class="seriesInfo">DOI 10.17487/RFC9000</span>, <time datetime="2021-05" class="refDate">May 2021</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9000">https://www.rfc-editor.org/rfc/rfc9000</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="sec-informative-references">
+<section id="section-13.2">
+        <h3 id="name-informative-references">
+<a href="#section-13.2" class="section-number selfRef">13.2. </a><a href="#name-informative-references" class="section-name selfRef">Informative References</a>
+        </h3>
+<dl class="references">
+<dt id="A2A">[A2A]</dt>
+        <dd>
+<span class="refAuthor">A2A Project</span>, <span class="refTitle">"Agent-to-Agent Protocol Specification"</span>, <span class="seriesInfo">Version 0.3.0</span>, <time datetime="2025" class="refDate">2025</time>, <span>&lt;<a href="https://google.github.io/A2A/specification/">https://google.github.io/A2A/specification/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="AutoGen">[AutoGen]</dt>
+        <dd>
+<span class="refAuthor">Wu, Q.</span>, <span class="refAuthor">Banber, G.</span>, <span class="refAuthor">Zhang, Y.</span>, <span class="refAuthor">Wu, Y.</span>, <span class="refAuthor">Li, B.</span>, <span class="refAuthor">Zhu, E.</span>, and <span class="refAuthor">A. Awadallah</span>, <span class="refTitle">"AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation"</span>, <span class="seriesInfo">arXiv 2308.08155</span>, <time datetime="2023" class="refDate">2023</time>, <span>&lt;<a href="https://arxiv.org/abs/2308.08155">https://arxiv.org/abs/2308.08155</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="MCP">[MCP]</dt>
+        <dd>
+<span class="refAuthor">Anthropic</span>, <span class="refTitle">"Model Context Protocol Specification"</span>, <span class="seriesInfo">Version 2025-06-18</span>, <time datetime="2025-06" class="refDate">June 2025</time>, <span>&lt;<a href="https://modelcontextprotocol.io/specification/">https://modelcontextprotocol.io/specification/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="MCP-MOQT">[MCP-MOQT]</dt>
+        <dd>
+<span class="refAuthor">Jennings, C.</span>, <span class="refAuthor">Swett, I.</span>, <span class="refAuthor">Rosenberg, J.</span>, and <span class="refAuthor">S. Nandakumar</span>, <span class="refTitle">"Model Context Protocol and Agent Skills over Media over QUIC Transport"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-mcp-over-moqt</span>, <time datetime="2025" class="refDate">2025</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-mcp-over-moqt/">https://datatracker.ietf.org/doc/draft-mcp-over-moqt/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="MoQ-C4M">[MoQ-C4M]</dt>
+        <dd>
+<span class="refAuthor">Jennings, S.</span>, <span class="refTitle">"Common Access Token for Media over QUIC"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-ietf-moq-c4m</span>, <time datetime="2025" class="refDate">2025</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-ietf-moq-c4m/">https://datatracker.ietf.org/doc/draft-ietf-moq-c4m/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7519">[RFC7519]</dt>
+        <dd>
+<span class="refAuthor">Jones, M.</span>, <span class="refAuthor">Bradley, J.</span>, and <span class="refAuthor">N. Sakimura</span>, <span class="refTitle">"JSON Web Token (JWT)"</span>, <span class="seriesInfo">RFC 7519</span>, <span class="seriesInfo">DOI 10.17487/RFC7519</span>, <time datetime="2015-05" class="refDate">May 2015</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7519">https://www.rfc-editor.org/rfc/rfc7519</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7540">[RFC7540]</dt>
+        <dd>
+<span class="refAuthor">Belshe, M.</span>, <span class="refAuthor">Peon, R.</span>, and <span class="refAuthor">M. Thomson, Ed.</span>, <span class="refTitle">"Hypertext Transfer Protocol Version 2 (HTTP/2)"</span>, <span class="seriesInfo">RFC 7540</span>, <span class="seriesInfo">DOI 10.17487/RFC7540</span>, <time datetime="2015-05" class="refDate">May 2015</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7540">https://www.rfc-editor.org/rfc/rfc7540</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9110">[RFC9110]</dt>
+        <dd>
+<span class="refAuthor">Fielding, R., Ed.</span>, <span class="refAuthor">Nottingham, M., Ed.</span>, and <span class="refAuthor">J. Reschke, Ed.</span>, <span class="refTitle">"HTTP Semantics"</span>, <span class="seriesInfo">STD 97</span>, <span class="seriesInfo">RFC 9110</span>, <span class="seriesInfo">DOI 10.17487/RFC9110</span>, <time datetime="2022-06" class="refDate">June 2022</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9110">https://www.rfc-editor.org/rfc/rfc9110</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9297">[RFC9297]</dt>
+        <dd>
+<span class="refAuthor">Schinazi, D.</span> and <span class="refAuthor">L. Pardue</span>, <span class="refTitle">"HTTP Datagrams and the Capsule Protocol"</span>, <span class="seriesInfo">RFC 9297</span>, <span class="seriesInfo">DOI 10.17487/RFC9297</span>, <time datetime="2022-08" class="refDate">August 2022</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9297">https://www.rfc-editor.org/rfc/rfc9297</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="SD-AGENT">[SD-AGENT]</dt>
+      <dd>
+<span class="refAuthor">Nandakumar, S.</span> and <span class="refAuthor">C. Jennings</span>, <span class="refTitle">"SD Agent: Selective Disclosure for Agent Discovery and Identity Management"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-nandakumar-agent-sd-jwt-02</span>, <time datetime="2026-02" class="refDate">February 2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-nandakumar-agent-sd-jwt/">https://datatracker.ietf.org/doc/draft-nandakumar-agent-sd-jwt/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+</section>
+</div>
+<div id="example-workflows">
+<section id="appendix-A">
+      <h2 id="name-example-workflows">
+<a href="#appendix-A" class="section-number selfRef">Appendix A. </a><a href="#name-example-workflows" class="section-name selfRef">Example Workflows</a>
+      </h2>
+<p id="appendix-A-1">This appendix illustrates common PACE workflows end-to-end, showing
+how agents use the namespace structure, session establishment, and
+protocol bindings defined in this document.<a href="#appendix-A-1" class="pilcrow">¶</a></p>
+<div id="agent-to-agent-task-delegation">
+<section id="appendix-A.1">
+        <h3 id="name-agent-to-agent-task-delegat">
+<a href="#appendix-A.1" class="section-number selfRef">A.1. </a><a href="#name-agent-to-agent-task-delegat" class="section-name selfRef">Agent-to-Agent: Task Delegation</a>
+        </h3>
+<p id="appendix-A.1-1">Agent A (a coordinator) delegates a research task to Agent B. This
+is a point-to-point session using the A2A binding.<a href="#appendix-A.1-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.1-2"><strong>Setup</strong>: Agent A generates session-id <code>s1</code> (a UUID) and establishes
+a session with Agent B via the flow in <a href="#session-management" class="auto internal xref">Section 4</a>.<a href="#appendix-A.1-2" class="pilcrow">¶</a></p>
+<p id="appendix-A.1-3"><strong>Resulting namespace layout</strong>:<a href="#appendix-A.1-3" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-A.1-4">
+<pre>
+Agent A publishes:
+  ("pace","agents","agent-a","s1") -- "ctrl"            (SESSION_INIT)
+  ("pace","agents","agent-a","s1") -- "a2a/request/r1"  (task request)
+
+Agent B publishes:
+  ("pace","agents","agent-b","s1") -- "ctrl"            (SESSION_ACCEPT)
+  ("pace","agents","agent-b","s1") -- "a2a/response/r1" (task result)
+</pre><a href="#appendix-A.1-4" class="pilcrow">¶</a>
+</div>
+<p id="appendix-A.1-5"><strong>Flow</strong>:<a href="#appendix-A.1-5" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="appendix-A.1-6">
+<li id="appendix-A.1-6.1">
+            <p id="appendix-A.1-6.1.1">A publishes SESSION_INIT on its <code>"ctrl"</code> track — the relay forwards
+to B via B's SUBSCRIBE_TRACKS prefix match<a href="#appendix-A.1-6.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.1-6.2">
+            <p id="appendix-A.1-6.2.1">B accepts the forwarded PUBLISH, publishes SESSION_ACCEPT on its
+own <code>"ctrl"</code> track<a href="#appendix-A.1-6.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.1-6.3">
+            <p id="appendix-A.1-6.3.1">A receives SESSION_ACCEPT via the relay (A's SUBSCRIBE_TRACKS on B)<a href="#appendix-A.1-6.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.1-6.4">
+            <p id="appendix-A.1-6.4.1">A publishes a JSON-RPC request on <code>"a2a/request/r1"</code>:
+<code>{"jsonrpc":"2.0","method":"message/send","params":{...},"id":"r1"}</code><a href="#appendix-A.1-6.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.1-6.5">
+            <p id="appendix-A.1-6.5.1">B receives the request (via its subscription to A's namespace),
+processes it, and publishes the result on <code>"a2a/response/r1"</code><a href="#appendix-A.1-6.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.1-6.6">
+            <p id="appendix-A.1-6.6.1">A receives the response via its subscription to B's namespace<a href="#appendix-A.1-6.6.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.1-6.7">
+            <p id="appendix-A.1-6.7.1">Either agent publishes SESSION_CLOSE on <code>"ctrl"</code> to terminate<a href="#appendix-A.1-6.7.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="agent-to-tool-mcp-tool-invocation">
+<section id="appendix-A.2">
+        <h3 id="name-agent-to-tool-mcp-tool-invo">
+<a href="#appendix-A.2" class="section-number selfRef">A.2. </a><a href="#name-agent-to-tool-mcp-tool-invo" class="section-name selfRef">Agent-to-Tool: MCP Tool Invocation</a>
+        </h3>
+<p id="appendix-A.2-1">Agent A needs to read a file using a filesystem tool (an MCP server).<a href="#appendix-A.2-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.2-2"><strong>Setup</strong>: Agent A generates session-id <code>s2</code> and establishes a session
+with the filesystem tool.<a href="#appendix-A.2-2" class="pilcrow">¶</a></p>
+<p id="appendix-A.2-3"><strong>Resulting namespace layout</strong>:<a href="#appendix-A.2-3" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-A.2-4">
+<pre>
+Agent A publishes:
+  ("pace","agents","agent-a","s2") -- "ctrl"
+  ("pace","agents","agent-a","s2") -- "mcp/tools/readFile"  (tool call)
+
+Tool publishes:
+  ("pace","agents","fs-tool","s2") -- "ctrl"
+  ("pace","agents","fs-tool","s2") -- "mcp/tools/readFile"  (tool result)
+</pre><a href="#appendix-A.2-4" class="pilcrow">¶</a>
+</div>
+<p id="appendix-A.2-5"><strong>Flow</strong>:<a href="#appendix-A.2-5" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="appendix-A.2-6">
+<li id="appendix-A.2-6.1">
+            <p id="appendix-A.2-6.1.1">A establishes a session with the tool (SESSION_INIT / ACCEPT)<a href="#appendix-A.2-6.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.2-6.2">
+            <p id="appendix-A.2-6.2.1">A publishes a tool call on <code>"mcp/tools/readFile"</code>:
+<code>{"jsonrpc":"2.0","method":"tools/call","params":{"name":"readFile",
+"arguments":{"path":"/data/report.csv"}},"id":"t1"}</code><a href="#appendix-A.2-6.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.2-6.3">
+            <p id="appendix-A.2-6.3.1">Tool receives the call, reads the file, publishes the result on its
+own <code>"mcp/tools/readFile"</code> track<a href="#appendix-A.2-6.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.2-6.4">
+            <p id="appendix-A.2-6.4.1">A receives the file contents<a href="#appendix-A.2-6.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.2-6.5">
+            <p id="appendix-A.2-6.5.1">A may issue additional tool calls within the same session or close it<a href="#appendix-A.2-6.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="multi-agent-collaboration">
+<section id="appendix-A.3">
+        <h3 id="name-multi-agent-collaboration">
+<a href="#appendix-A.3" class="section-number selfRef">A.3. </a><a href="#name-multi-agent-collaboration" class="section-name selfRef">Multi-Agent Collaboration</a>
+        </h3>
+<p id="appendix-A.3-1">Agent A (coordinator) creates a research session and invites Agent B
+(web researcher) and Agent C (data analyst) to collaborate.<a href="#appendix-A.3-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.3-2"><strong>Setup</strong>: Agent A generates session-id <code>s3</code> and publishes SESSION_INIT
+on its ctrl track — the relay forwards to B and C via their
+SUBSCRIBE_TRACKS prefix match on A's agent namespace.<a href="#appendix-A.3-2" class="pilcrow">¶</a></p>
+<p id="appendix-A.3-3"><strong>Resulting namespace layout</strong>:<a href="#appendix-A.3-3" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="appendix-A.3-4">
+<pre>
+Agent A publishes:
+  ("pace","agents","agent-a","s3") -- "ctrl"     (session mgmt, assignments)
+  ("pace","agents","agent-a","s3") -- "chat"     (coordination messages)
+
+Agent B publishes:
+  ("pace","agents","agent-b","s3") -- "ctrl"     (SESSION_ACCEPT)
+  ("pace","agents","agent-b","s3") -- "chat"     (status updates)
+  ("pace","agents","agent-b","s3") -- "a2a/task/research-1"  (findings)
+
+Agent C publishes:
+  ("pace","agents","agent-c","s3") -- "ctrl"     (SESSION_ACCEPT)
+  ("pace","agents","agent-c","s3") -- "chat"     (status updates)
+  ("pace","agents","agent-c","s3") -- "a2a/task/analysis-1"  (results)
+</pre><a href="#appendix-A.3-4" class="pilcrow">¶</a>
+</div>
+<p id="appendix-A.3-5"><strong>Subscriptions</strong>: Each agent subscribes to the other two agents'
+session namespaces:<a href="#appendix-A.3-5" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="appendix-A.3-6.1">
+            <p id="appendix-A.3-6.1.1">A subscribes to <code>("pace","agents","agent-b","s3")</code> and
+<code>("pace","agents","agent-c","s3")</code><a href="#appendix-A.3-6.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="appendix-A.3-6.2">
+            <p id="appendix-A.3-6.2.1">B subscribes to <code>("pace","agents","agent-a","s3")</code> and
+<code>("pace","agents","agent-c","s3")</code><a href="#appendix-A.3-6.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="appendix-A.3-6.3">
+            <p id="appendix-A.3-6.3.1">C subscribes to <code>("pace","agents","agent-a","s3")</code> and
+<code>("pace","agents","agent-b","s3")</code><a href="#appendix-A.3-6.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="appendix-A.3-7"><strong>Flow</strong>:<a href="#appendix-A.3-7" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="appendix-A.3-8">
+<li id="appendix-A.3-8.1">
+            <p id="appendix-A.3-8.1.1">A establishes session, B and C accept<a href="#appendix-A.3-8.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.3-8.2">
+            <p id="appendix-A.3-8.2.1">A publishes task assignments on <code>"chat"</code> — the relay fans out
+to both B and C<a href="#appendix-A.3-8.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.3-8.3">
+            <p id="appendix-A.3-8.3.1">B performs web research, publishes findings incrementally on
+<code>"a2a/task/research-1"</code> (using MOQT groups for phases)<a href="#appendix-A.3-8.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.3-8.4">
+            <p id="appendix-A.3-8.4.1">C subscribes to B's research track, receives findings as they
+arrive, and begins analysis<a href="#appendix-A.3-8.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.3-8.5">
+            <p id="appendix-A.3-8.5.1">C publishes analysis results on <code>"a2a/task/analysis-1"</code><a href="#appendix-A.3-8.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.3-8.6">
+            <p id="appendix-A.3-8.6.1">A monitors all progress through its subscriptions and publishes
+a final summary when complete<a href="#appendix-A.3-8.6.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.3-8.7">
+            <p id="appendix-A.3-8.7.1">A publishes SESSION_CLOSE — all participants unsubscribe<a href="#appendix-A.3-8.7.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+<div id="agent-to-tool-with-streaming-long-running-operation">
+<section id="appendix-A.4">
+        <h3 id="name-agent-to-tool-with-streamin">
+<a href="#appendix-A.4" class="section-number selfRef">A.4. </a><a href="#name-agent-to-tool-with-streamin" class="section-name selfRef">Agent-to-Tool with Streaming: Long-Running Operation</a>
+        </h3>
+<p id="appendix-A.4-1">Agent A invokes a code-generation tool that produces output
+incrementally.<a href="#appendix-A.4-1" class="pilcrow">¶</a></p>
+<p id="appendix-A.4-2"><strong>Setup</strong>: Same as tool invocation — Agent A and the tool share
+session-id <code>s4</code>.<a href="#appendix-A.4-2" class="pilcrow">¶</a></p>
+<p id="appendix-A.4-3"><strong>Flow</strong>:<a href="#appendix-A.4-3" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="appendix-A.4-4">
+<li id="appendix-A.4-4.1">
+            <p id="appendix-A.4-4.1.1">A publishes a tool call on <code>"mcp/tools/generateCode"</code><a href="#appendix-A.4-4.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.4-4.2">
+            <p id="appendix-A.4-4.2.1">Tool begins generating code and publishes results using MOQT groups:<a href="#appendix-A.4-4.2.1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="appendix-A.4-4.2.2.1">
+                <p id="appendix-A.4-4.2.2.1.1">Group 0: <code>{"status":"started","language":"python"}</code><a href="#appendix-A.4-4.2.2.1.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="appendix-A.4-4.2.2.2">
+                <p id="appendix-A.4-4.2.2.2.1">Group 1, Object 0: first code block<a href="#appendix-A.4-4.2.2.2.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="appendix-A.4-4.2.2.3">
+                <p id="appendix-A.4-4.2.2.3.1">Group 1, Object 1: second code block<a href="#appendix-A.4-4.2.2.3.1" class="pilcrow">¶</a></p>
+</li>
+              <li class="normal" id="appendix-A.4-4.2.2.4">
+                <p id="appendix-A.4-4.2.2.4.1">Group 2: <code>{"status":"complete","totalLines":142}</code><a href="#appendix-A.4-4.2.2.4.1" class="pilcrow">¶</a></p>
+</li>
+            </ul>
+</li>
+          <li id="appendix-A.4-4.3">
+            <p id="appendix-A.4-4.3.1">A receives objects as they are published (ascending group order)<a href="#appendix-A.4-4.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.4-4.4">
+            <p id="appendix-A.4-4.4.1">If A needs to cancel, it publishes a cancellation on <code>"ctrl"</code><a href="#appendix-A.4-4.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="appendix-A.4-4.5">
+            <p id="appendix-A.4-4.5.1">Tool receives cancellation, stops generation, publishes final
+status<a href="#appendix-A.4-4.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+</div>
+</section>
+</div>
+<div id="acknowledgments">
+<section id="appendix-B">
+      <h2 id="name-acknowledgments">
+<a href="#appendix-B" class="section-number selfRef">Appendix B. </a><a href="#name-acknowledgments" class="section-name selfRef">Acknowledgments</a>
+      </h2>
+<p id="appendix-B-1">TODO<a href="#appendix-B-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="authors-addresses">
+<section id="appendix-C">
+      <h2 id="name-authors-addresses">
+<a href="#name-authors-addresses" class="section-name selfRef">Authors' Addresses</a>
+      </h2>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Suhas Nandakumar</span></div>
+<div dir="auto" class="left"><span class="org">Cisco</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:snandaku@cisco.com" class="email">snandaku@cisco.com</a>
+</div>
+</address>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Cullen Jennings</span></div>
+<div dir="auto" class="left"><span class="org">Cisco Systems</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:fluffy@cisco.com" class="email">fluffy@cisco.com</a>
+</div>
+</address>
+</section>
+</div>
+<script>const toc = document.getElementById("toc");
+toc.querySelector("h2").addEventListener("click", e => {
+  toc.classList.toggle("active");
+});
+toc.querySelector("nav").addEventListener("click", e => {
+  toc.classList.remove("active");
+});
+</script>
+</body>
+</html>
