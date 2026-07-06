@@ -43,7 +43,6 @@ normative:
   RFC8174:
   RFC9000:
   RFC8446:
-  RFC9297:
   MoQ-TRANSPORT:
     title: "Media over QUIC Transport"
     date: 2026-01
@@ -61,6 +60,7 @@ informative:
   RFC7519:
   RFC7540:
   RFC9110:
+  RFC9297:
   A2A:
     title: "Agent-to-Agent Protocol Specification"
     date: 2025
@@ -91,14 +91,6 @@ informative:
     seriesinfo:
       arXiv: "2308.08155"
     target: https://arxiv.org/abs/2308.08155
-  WebTransport:
-    title: "The WebTransport Protocol Framework"
-    date: 2023-08
-    author:
-    - ins: V. Vasiliev
-    seriesinfo:
-      RFC: 9297
-    target: https://www.rfc-editor.org/rfc/rfc9297
   MoQ-C4M:
     title: "Common Access Token for Media over QUIC"
     date: 2025
@@ -131,84 +123,39 @@ informative:
 --- abstract
 
 This document defines the Protocol for Agent Communication Exchange (PACE),
-a session protocol for communication between AI agents and between agents
-and tools over Media over QUIC Transport (MOQT). PACE provides session
-lifecycle management, multi-modal data exchange (real-time media, chat,
-tool calls, file transfers), agent identity verification, and delegated
-authorization — all within a unified publish/subscribe transport that
-supports point-to-point and point-to-multipoint topologies.
-
-The protocol maps agent communication patterns onto MOQT primitives,
-leveraging MOQT's relay infrastructure for scalable fan-out, priority-based
-delivery, and graceful recovery from network failures through relay caching
-and QUIC connection migration.
+a session protocol for AI agent communication over Media over QUIC Transport
+(MOQT). PACE provides session lifecycle management, multi-modal data
+exchange, agent identity verification, and delegated authorization within
+MOQT's publish/subscribe model, supporting point-to-point and
+point-to-multipoint topologies through relay infrastructure.
 
 --- middle
 
 # Introduction
 
-AI agents are autonomous, adaptive intelligent software systems that use AI
-models to complete specific tasks. These agents interact via chat or voice,
-making decisions, executing actions, and communicating with other agents and
-tools independently. As agent-to-agent and agent-to-tool communication expands
-across the Internet, reliable interoperability across platforms and vendors
-becomes critical.
+AI agents are autonomous software systems that interact with other agents
+and tools to complete tasks. As agent communication expands across the
+Internet, it requires: verifiable agent identity independent of users,
+capability discovery and collaboration across network boundaries,
+multi-modal data exchange (text, audio, video) with session management,
+and delegated authorization across agent chains.
 
-The AI agent ecosystem presents unique communication requirements that
-existing transport protocols do not fully address:
-
-Agent Identity:
-: Agents may need to be authenticated independently of the users they
-  represent. Verifiable agent identity enables independent revocation,
-  scoped permissions, and auditability of agent-initiated actions.
-
-Capabilities and Collaboration:
-: Agents have specialized capabilities enhanced through collaboration.
-  This raises considerations for selecting agents and tools, initiating
-  communication, and maintaining interactions across network boundaries.
-
-Interaction Characteristics:
-: Agent interactions can be long-lived, utilize significant amounts of
-  context across various modes (text, audio, video), and require very
-  low latency. This introduces considerations around reliability,
-  transport session management, and efficient data transport.
-
-Security and Privacy:
-: Protecting data over untrusted networks requires mechanisms for identity
-  verification, confidentiality, integrity, authenticity, and delegated
-  authorization across AI agent chains.
-
-This document defines the Protocol for Agent Communication Exchange (PACE), which addresses
-these requirements by providing a session layer over Media over QUIC Transport
-(MOQT) {{MoQ-TRANSPORT}}. PACE enables diverse agent protocols to leverage
-MOQT's real-time streaming capabilities, built-in prioritization, scalable
-relay infrastructure, and efficient multiplexing over QUIC.
+This document defines the Protocol for Agent Communication Exchange (PACE),
+a session layer over Media over QUIC Transport (MOQT) {{MoQ-TRANSPORT}}.
+PACE enables diverse agent protocols to leverage MOQT's publish/subscribe
+model, relay-based fan-out, built-in prioritization, and efficient
+multiplexing over QUIC.
 
 ## Design Goals
 
-PACE is designed to meet the following objectives:
-
-1. **Session Lifecycle Management**: Provide timed session management
-   (short or long-lived) covering establishment, update, context
-   handling, and termination.
-
-2. **Multi-Modal Data Exchange**: Support concurrent exchange of
-   real-time data (voice/video), semi-real-time data (chat/streaming
-   text), and non-real-time data (tool calls/file transfers).
-
-3. **Scalable and Reliable**: Enable highly scalable session management
-   that survives network and server failures with graceful recovery.
-
-4. **Flexible Topologies**: Support point-to-point and point-to-multipoint
-   communication patterns through relay infrastructure.
-
-5. **Agent Identity and Authorization**: Provide mechanisms for agent
-   authentication independent of user identity, with delegated
-   authorization and fine-grained behavioral scopes.
-
-6. **Protocol Agnostic**: Serve as a session substrate usable by
-   application-layer protocols (A2A, MCP, and others) with appropriate
-   layering and extension points.
+1. **Session Lifecycle**: Timed sessions with establishment, update,
+   suspension, and termination.
+2. **Multi-Modal**: Concurrent real-time media, chat, and operations.
+3. **Scalable**: Relay-based fan-out with failure recovery.
+4. **Flexible Topologies**: Point-to-point and point-to-multipoint.
+5. **Agent Identity**: Authentication independent of user identity with
+   delegated authorization.
+6. **Protocol Agnostic**: Usable by A2A, MCP, and custom protocols.
 
 ## Requirements Language
 
@@ -216,133 +163,159 @@ PACE is designed to meet the following objectives:
 
 # Architecture Overview
 
-{{figure-arch}} illustrates the overall PACE architecture, showing how the
-session protocol layers over MOQT and QUIC, and how application protocols
-integrate through the extension framework.
+The PACE architecture layers as follows:
 
 ~~~
-┌──────────────────────────────────────────────────────────────────┐
-│                  Application Protocol Layer                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────────┐  │
-│  │   A2A    │  │   MCP    │  │ AutoGen  │  │ Custom Protocol │  │
-│  │  Tasks   │  │  Tools   │  │ Convos   │  │   Operations    │  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───────┬─────────┘  │
-└───────┼──────────────┼─────────────┼────────────────┼────────────┘
-        │              │             │                │
-┌───────▼──────────────▼─────────────▼────────────────▼────────────┐
-│              Protocol for Agent Communication Exchange (PACE)                     │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │  Session Management │ Identity │ Authorization │ Recovery  │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │  Multi-Modal Channels │ Priority │ Flow Control │ Context  │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────┬───────────────────────────────────┘
-                               │
-┌──────────────────────────────▼───────────────────────────────────┐
-│                       MOQT Transport                              │
-│   Pub/Sub │ Namespace Routing │ Relay Caching │ Object Delivery  │
-└──────────────────────────────┬───────────────────────────────────┘
-                               │
-┌──────────────────────────────▼───────────────────────────────────┐
-│                    QUIC / WebTransport                            │
-│   Encryption (TLS 1.3) │ Multiplexing │ Connection Migration     │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Application Protocols (A2A, MCP, AutoGen, Custom)      │
+├─────────────────────────────────────────────────────────┤
+│  PACE: Sessions │ Identity │ Auth │ Multi-Modal │ QoS   │
+├─────────────────────────────────────────────────────────┤
+│  MOQT: Pub/Sub │ Namespace Routing │ Relay Caching      │
+├─────────────────────────────────────────────────────────┤
+│  QUIC / WebTransport: TLS 1.3 │ Mux │ Migration         │
+└─────────────────────────────────────────────────────────┘
 ~~~
 {: #figure-arch title="PACE Architecture"}
 
 ## MOQT as Session Substrate
 
 Media over QUIC Transport (MOQT) {{MoQ-TRANSPORT}} is a publish/subscribe
-protocol built on QUIC that delivers low-latency, highly-scalable message
-distribution. MOQT decouples publishers from subscribers through
-intermediary relay infrastructure, enabling efficient fan-out to many
-consumers without requiring direct connections between endpoints.
+protocol over QUIC providing:
 
-MOQT provides several properties essential for agent communication:
+* **Hierarchical Namespaces**: Content addressed by namespace tuples,
+  enabling prefix-based routing and caching
+* **Relay Fan-Out**: Publishers connect once; relays distribute to all
+  subscribers without direct peer connections
+* **Low Latency**: QUIC 0-RTT, stream multiplexing, priority (0-255)
+* **Fault Tolerance**: Relay caching enables recovery from disconnections
 
-* **Named Data Addressing**: Content is addressed by hierarchical
-  namespace tuples rather than endpoint locations, enabling
-  location-independent data retrieval and natural caching
+Agents connect to MOQT relays which handle subscription matching,
+fan-out, and object caching. Relays MAY be organized hierarchically
+for geographic locality.
 
-* **Application Layer Multicast**: Relay infrastructure provides
-  multicast-like fan-out without requiring network-layer multicast,
-  making one-to-many distribution practical across the public Internet
+# Namespace Organization {#namespace}
 
-* **Low Latency**: QUIC's 0-RTT connection establishment, stream
-  multiplexing to prevent head-of-line blocking, and priority-based
-  delivery (0-255 scale) ensure time-critical messages are transmitted first
+PACE uses MOQT's hierarchical namespace for routing, isolation, and
+multiplexing. MOQT addresses content using a namespace tuple (an ordered
+sequence of string fields) combined with a track name. PACE organizes
+all communication into three namespace scopes defined in the following
+subsections.
 
-* **High Scalability**: Publishers connect once to a relay which fans
-  out to all subscribers; hierarchical relay networks distribute load
-  across geographic regions
-
-* **Fault Tolerance**: Relay redundancy enables failover without
-  disrupting active sessions; object caching at relays enables
-  recovery from transient disconnections
-
-{{figure-moqt-relay}} illustrates the relay architecture that enables
-PACE's scalability and reliability properties.
+## Agent Namespace
 
 ~~~
-PACE Relay Architecture:
-
-  Agent Endpoints              Relay Network                Agent Endpoints
-
-┌──────────────┐                                          ┌──────────────┐
-│   Agent A    │──publish──┐                      ┌──────▶│   Agent X    │
-│  (initiator) │           │   ┌──────────────┐   │       │ (responder)  │
-└──────────────┘           ├──▶│              │───┤       └──────────────┘
-                           │   │  MOQT Relay  │   │
-┌──────────────┐           │   │              │   │       ┌──────────────┐
-│   Agent B    │──publish──┘   │ ┌──────────┐ │   ├──────▶│   Agent Y    │
-│   (tool)     │               │ │  Cache   │ │   │       │ (observer)   │
-└──────────────┘               │ └──────────┘ │   │       └──────────────┘
-                               └──────┬───────┘   │
-                                      │           │       ┌──────────────┐
-                                      ▼           └──────▶│   Agent Z    │
-                              ┌──────────────┐            │ (collaborator)│
-                              │  Edge Relay  │            └──────────────┘
-                              │ ┌──────────┐ │
-                              │ │  Cache   │ │───▶ More Agents
-                              │ └──────────┘ │
-                              └──────────────┘
+  ("pace", "agents", {agent-id}) -- {track}
 ~~~
-{: #figure-moqt-relay title="PACE Relay Architecture"}
+
+This is an agent's persistent identity on the relay network. Each agent
+publishes the following tracks:
+
+* `"card"` — Agent Card containing capabilities, identity claims,
+  authentication schemes, and MOQT connectivity information
+* `"inbox"` — Incoming session invitations from other agents; each
+  object contains a session-id and the inviting agent's identifier
+
+The common prefix `("pace", "agents")` enables SUBSCRIBE_NAMESPACE-based
+discovery of all agents on the network. See {{agent-discovery}} for the
+complete discovery flow.
+
+## Session Communication Namespace
+
+~~~
+  ("pace", "agents", {agent-id}, {session-id}) -- {track}
+~~~
+
+A session-id is a shared UUID representing a collaboration context — it
+is not scoped to or owned by any single agent. Any agent can generate a
+session-id and invite others to collaborate under it. When multiple
+agents participate in a session, they each publish tracks under their
+own agent namespace using the same session-id.
+
+When an agent creates or joins a session, it MUST issue
+PUBLISH_NAMESPACE on its session namespace
+(`("pace","agents",{agent-id},{session-id})`) to enable the relay to
+route subscriptions to it. This is a separate PUBLISH_NAMESPACE from
+the agent-level one — MOQT requires an explicit PUBLISH_NAMESPACE for
+each namespace a publisher wants subscriptions routed to.
+
+To receive messages from a peer within a session, an agent issues
+SUBSCRIBE_NAMESPACE on that peer's session namespace
+(`("pace","agents",{peer-agent-id},{session-id})`). The relay matches
+this against the peer's PUBLISH_NAMESPACE and routes subscriptions
+accordingly.
+
+Each agent in a session publishes the following tracks:
+
+* `"ctrl"` — Session lifecycle messages (SESSION_INIT, SESSION_ACCEPT,
+  SESSION_UPDATE, SESSION_CLOSE)
+* `"chat"` — Chat messages and streaming LLM output
+* `"audio"` — Real-time audio stream
+* `"video"` — Real-time video stream
+* `"ops/{req-id}"` — Request/response operations (one track per request)
+
+Protocol bindings add prefix-scoped tracks to enable multiple protocols
+to operate concurrently within a single session without track name
+collisions:
+
+* `"a2a/{category}/{id}"` — A2A protocol operations, where `{category}`
+  is the operation type (e.g., `request`, `response`, `task`, `stream`)
+  and `{id}` is the request or task identifier
+* `"mcp/{category}/{id}"` — MCP protocol operations, where `{category}`
+  is the primitive type (e.g., `tools`, `resources`, `prompts`) and
+  `{id}` is the tool name or resource URI
+* `"ext/{proto}/{category}/{id}"` — Custom protocol extensions, where
+  `{proto}` identifies the protocol
+
+For example, the MCP over MOQT specification {{MCP-MOQT}} defines
+tracks like `(mcp, {session-id}, tools) -- ({tool-name})`; within PACE,
+this maps to track name `"mcp/tools/{tool-name}"` under the agent's
+session namespace, preserving the MCP semantics while coexisting with
+A2A or other protocol tracks in the same session.
+
+See {{example-workflows}} for concrete examples of agent-to-agent,
+agent-to-tool, and multi-agent collaboration workflows.
+
+## Session Discovery Namespace
+
+~~~
+  ("pace", "discovery", "sessions", {agent-id}) -- {session-id}
+~~~
+
+Agents advertise their active sessions on this top-level discovery
+namespace so that other agents can find sessions to join. Each agent
+publishes one track per active session (the track name is the
+session-id). Each object on a session track contains:
+
+* `session-id` — The shared session UUID
+* `description` — Human-readable purpose of the session
+* `participants` — List of agent-ids currently in the session
+* `modalities` — Supported data modalities (text, audio, video, etc.)
+
+Agents discover active sessions by issuing SUBSCRIBE_NAMESPACE on
+`("pace", "discovery", "sessions")`.
+
 
 # Session Management {#session-management}
 
-An PACE session represents a logical communication context between two or more
-agents. Sessions are the fundamental unit of interaction, providing lifetime
-management, context preservation, and failure recovery.
+A PACE session represents a logical communication context between two or
+more agents. Sessions provide lifetime management, context preservation,
+and failure recovery. All session operations use the namespace structure
+defined in {{namespace}}.
 
 ## Session Lifecycle
 
 Sessions progress through defined states:
 
 ~~~
-Session State Machine:
-
-  ┌───────────┐    establish     ┌───────────┐
-  │           │─────────────────▶│           │
-  │  IDLE     │                  │  PENDING  │
-  │           │◀─────────────────│           │
-  └───────────┘     reject       └─────┬─────┘
-                                       │ accept
-                                       ▼
-                                 ┌───────────┐
-                     update      │           │     suspend
-                  ┌─────────────▶│  ACTIVE   │──────────────┐
-                  │              │           │              │
-                  │              └─────┬─────┘              ▼
-                  │                    │              ┌───────────┐
-                  │                    │ terminate    │ SUSPENDED │
-                  │                    ▼              │           │
-                  │              ┌───────────┐       └─────┬─────┘
-                  │              │           │             │ resume
-                  │              │  CLOSED   │◀────────────┘
-                  │              │           │   (or timeout→CLOSED)
-                  └──────────────└───────────┘
+IDLE ──establish──▶ PENDING ──accept──▶ ACTIVE ◀──update──┐
+  ◀──reject──────────┘                    │  │             │
+                                     suspend  terminate    │
+                                          ▼       │       │
+                                    SUSPENDED     ▼       │
+                                     │  │       CLOSED ◀──┘
+                                     │  └resume──▶ ACTIVE
+                                     └─timeout──▶ CLOSED
 ~~~
 {: #figure-session-states title="Session State Machine"}
 
@@ -350,62 +323,98 @@ IDLE:
 : No session exists. Agent is available to initiate or accept sessions.
 
 PENDING:
-: Session establishment in progress. Capability negotiation and
-  authentication are being performed.
+: Establishment in progress (negotiation, authentication).
 
 ACTIVE:
-: Session is established and data exchange is occurring. Sessions
-  can be updated (renegotiate capabilities, add participants) while active.
+: Session established; data exchange occurring. May be updated.
 
 SUSPENDED:
-: Session is temporarily inactive but state is preserved. The session
-  may be resumed without full re-establishment. Sessions automatically
-  transition to CLOSED after a configurable timeout.
+: Temporarily inactive, state preserved. Transitions to CLOSED on timeout.
 
 CLOSED:
-: Session has terminated. Resources are released and state is cleaned up.
+: Session terminated. Resources released.
 
 ## Session Establishment
 
-Session establishment combines MOQT connection setup with PACE-specific
-negotiation of session parameters, agent identity, and capabilities.
+Session establishment creates a shared communication context between
+two or more agents. Its goals are: (1) negotiate capabilities and
+modalities both agents support, (2) exchange identity tokens and verify
+authorization, and (3) set up the MOQT namespace subscriptions so that
+both agents can publish and receive messages within the session.
+
+The mechanism relies on three MOQT operations. The initiator publishes
+a SESSION_INIT object on a new session control track under its own
+namespace, containing proposed session parameters. It then delivers a
+lightweight invite to the target agent's inbox track, notifying the
+target that a session is waiting. The target agent inspects the invite,
+subscribes to the initiator's session namespace to read the SESSION_INIT
+parameters, and — if it accepts — publishes a SESSION_ACCEPT on its own
+session control track. The initiator then subscribes to the target's
+session namespace, completing the bidirectional subscription setup.
+
+Once both agents have subscribed to each other's session namespace, the
+session transitions to ACTIVE and data exchange can begin on any track
+within that session scope.
+
+The following example illustrates the flow for Agent A initiating a
+session with Agent B (assumes A has already discovered B via
+{{agent-discovery}}):
 
 ~~~
-Session Establishment Flow:
+Session Establishment Example:
 
 Agent A                          MOQT Relay                        Agent B
   │                                  │                                │
-  │── QUIC/WebTransport Connect ────▶│                                │
-  │◀── Connection Established ───────│                                │
+  │── PUBLISH SESSION_INIT ─────────▶│                                │
+  │   Track: ("pace","agents",       │                                │
+  │    "agent-a",{sid}) -- "ctrl"    │                                │
+  │   Object: {session params,       │                                │
+  │    capabilities, modalities}     │                                │
   │                                  │                                │
-  │── MOQT CLIENT_SETUP ───────────▶│                                │
-  │◀── MOQT SERVER_SETUP ───────────│                                │
+  │── PUBLISH invite ───────────────▶│── forward to B's inbox ───────▶│
+  │   Track: ("pace","agents",       │                                │
+  │    "agent-b") -- "inbox"         │                                │
+  │   Object: {session-id,           │                                │
+  │    from: agent-a}                │                                │
   │                                  │                                │
-  │── PUBLISH_NAMESPACE ────────────▶│                                │
-  │   (pace/{session}/ctrl/agent-a)  │                                │
+  │── PUBLISH session advertisement ▶│                                │
+  │   Track: ("pace","discovery",    │                                │
+  │    "sessions","agent-a")         │                                │
+  │    -- {sid}                      │                                │
   │                                  │                                │
-  │── SESSION_INIT ─────────────────▶│── SESSION_INIT ───────────────▶│
-  │   (identity, capabilities,       │   (forwarded)                  │
-  │    requested modalities,         │                                │
-  │    session parameters)           │                                │
+  │                                  │   [B receives invite, reads    │
+  │                                  │    SESSION_INIT, decides to    │
+  │                                  │    accept]                     │
   │                                  │                                │
-  │                                  │◀── SESSION_ACCEPT ─────────────│
-  │◀── SESSION_ACCEPT ──────────────│   (identity, capabilities,     │
-  │   (negotiated params)            │    accepted modalities)        │
+  │                                  │◀── SUBSCRIBE_NAMESPACE ────────│
+  │                                  │   ("pace","agents","agent-a",  │
+  │                                  │    {sid})                      │
   │                                  │                                │
-  │◀═══════ Session ACTIVE ════════▶│◀═══════════════════════════════▶│
+  │                                  │◀── PUBLISH SESSION_ACCEPT ─────│
+  │◀── forward ─────────────────────│   Track: ("pace","agents",     │
+  │                                  │    "agent-b",{sid}) -- "ctrl"  │
+  │                                  │   Object: {capabilities,      │
+  │                                  │    accepted modalities}        │
+  │                                  │                                │
+  │── SUBSCRIBE_NAMESPACE ──────────▶│                                │
+  │   ("pace","agents","agent-b",    │                                │
+  │    {sid})                        │                                │
+  │                                  │                                │
+  │◀═══════════ PACE Session ACTIVE ═══════════════════════════════▶│
 ~~~
-{: #figure-session-establish title="Session Establishment"}
-
-During session establishment, agents exchange the following information:
+{: #figure-session-establish title="Session Establishment Example"}
 
 ### Session Parameters
+
+The SESSION_INIT object contains:
 
 * `session-id`: Globally unique session identifier (UUID)
 * `session-type`: Short-lived (bounded duration) or long-lived (indefinite)
 * `session-timeout`: Maximum idle duration before automatic termination
 * `max-participants`: Maximum number of agents in the session
 * `supported-modalities`: Bitmask of data modalities the agent can handle
+* `identity-token`: Agent identity token (see {{identity-discovery}})
+* `supported-protocols`: Application protocols offered (A2A, MCP, etc.)
 
 ### MOQT Setup Extensions
 
@@ -422,253 +431,143 @@ CLIENT_SETUP/SERVER_SETUP:
 
 ## Timed Sessions
 
-PACE supports both short-lived and long-lived sessions to accommodate
-different agent interaction patterns:
-
-Short-Lived Sessions:
-: Bounded duration sessions for discrete operations such as a single tool
-  invocation or query. The session has a defined maximum lifetime and
-  automatically terminates upon completion or timeout. Optimized for
-  low-overhead interactions.
-
-Long-Lived Sessions:
-: Indefinite sessions for ongoing collaboration, monitoring, or
-  persistent agent relationships. These sessions survive idle periods
-  through the SUSPENDED state and can be resumed without full
-  re-establishment. Suitable for complex multi-step tasks, ongoing
-  advisory relationships, or persistent tool connections.
-
-Session timing is governed by the `session-timeout` parameter, which
-defines the maximum idle period before automatic transition to CLOSED.
-Agents MAY send keepalive messages to prevent timeout during periods
-of inactivity.
+Sessions are either short-lived (bounded duration, auto-terminates on
+completion or timeout) or long-lived (indefinite, survives idle periods
+via SUSPENDED state). The `session-timeout` parameter defines the
+maximum idle period before automatic transition to CLOSED.
 
 ## Session Update
 
-Active sessions can be updated to renegotiate parameters without
-terminating the session:
-
-* Adding or removing data modalities
-* Adjusting priority mappings
-* Adding participants (transitioning from point-to-point to multipoint)
-* Updating authorization scopes
-* Extending session timeout
-
-Updates are performed by publishing a SESSION_UPDATE message on the
-session control track. All participants MUST acknowledge the update
-before new parameters take effect.
+Active sessions can be updated by publishing a SESSION_UPDATE message
+on the control track. Updates can modify modalities, participants,
+authorization scopes, or timeout. All participants MUST acknowledge
+the update before new parameters take effect.
 
 ## Session Recovery {#session-recovery}
 
-PACE provides graceful recovery from network and server failures through
-multiple mechanisms:
+PACE provides graceful recovery from network and server failures:
 
 QUIC Connection Migration:
-: QUIC's connection ID mechanism allows sessions to survive network
-  path changes (e.g., WiFi to cellular) without re-establishing the
+: Sessions survive network path changes (e.g., WiFi to cellular)
+  via QUIC's connection ID mechanism without re-establishing the
   MOQT session.
 
 Relay Caching:
-: MOQT relays cache recent objects, allowing agents that reconnect
-  after transient disconnections to receive missed messages from cache
-  without requiring the peer to retransmit.
+: Relays cache recent objects, allowing reconnecting agents to receive
+  missed messages without requiring peer retransmission.
 
 Session Resumption:
-: Agents that experience prolonged disconnections can resume SUSPENDED
-  sessions by re-authenticating and providing the session-id. The
-  relay provides cached context from the point of disconnection.
+: Agents resume SUSPENDED sessions by reconnecting to the relay,
+  re-issuing PUBLISH_NAMESPACE on their agent namespace, and
+  re-subscribing to peer session namespaces. The relay delivers
+  cached objects from the point of disconnection.
 
 State Checkpointing:
-: Agents SHOULD periodically publish session state checkpoints on a
-  dedicated state track. These checkpoints enable recovery of session
-  context after relay failures.
-
-~~~
-Session Recovery Flow:
-
-Agent A              MOQT Relay              Agent B
-  │                      │                      │
-  │══ ACTIVE SESSION ═══▶│◀═════════════════════│
-  │                      │                      │
-  ╳ (network failure)    │                      │
-  │                      │                      │
-  │                      │  (relay caches       │
-  │                      │   recent objects)    │
-  │                      │                      │
-  │── QUIC Reconnect ──▶│                      │
-  │── SESSION_RESUME ───▶│                      │
-  │   (session-id, last  │                      │
-  │    received seq)     │                      │
-  │                      │                      │
-  │◀── Cached Objects ───│  (catch-up from      │
-  │   (missed messages)  │   cache)             │
-  │                      │                      │
-  │══ SESSION RESUMED ══▶│◀═════════════════════│
-~~~
-{: #figure-session-recovery title="Session Recovery via Relay Caching"}
+: Agents SHOULD periodically publish state checkpoints on a dedicated
+  track, enabling recovery after relay failures.
 
 ## Session Termination
 
-Sessions are terminated explicitly via SESSION_CLOSE or implicitly via
-timeout. Upon termination:
-
-1. All active subscriptions are cancelled
-2. Pending operations receive cancellation notifications
-3. Session state and cached objects are retained for a configurable
-   grace period to handle in-flight messages
-4. After the grace period, all session resources are released
+Sessions terminate explicitly via SESSION_CLOSE on the control track or
+implicitly via timeout. Upon termination, all subscriptions are
+cancelled, pending operations receive cancellation notifications, and
+session resources are released after a configurable grace period.
 
 # Agent Identity and Discovery {#identity-discovery}
 
 ## Agent Identity Model
 
-PACE defines an identity model where agents are authenticated
-independently of the users they represent. This separation enables:
-
-* Independent revocation of agent credentials without affecting user accounts
-* Scoped permissions specific to agent capabilities
-* Auditability of agent-initiated actions distinct from user actions
-* Delegation chains where agents act on behalf of other agents
+PACE authenticates agents independently of the users they represent.
+This enables independent revocation, capability-scoped permissions,
+audit trails for agent actions, and delegation chains.
 
 ### Agent Identity Token
 
 Each agent presents an identity token during session establishment.
-The token contains:
+The token format is based on JWT {{RFC7519}} with agent-specific claims:
 
-~~~
-Agent Identity Token Structure:
+| Claim | Description |
+|-------|-------------|
+| `agent-id` | Globally unique agent identifier (UUID) |
+| `issuer` | Identity provider that issued the token |
+| `subject` | User or organization the agent serves |
+| `capabilities` | Agent capability descriptors |
+| `scopes` | Authorized operation scopes |
+| `issued-at` | Token issuance timestamp |
+| `expires-at` | Token expiration timestamp |
+| `delegation-chain` | Parent agent references (see below) |
 
-┌──────────────────────────────────────────────────────────┐
-│                    Token Header                           │
-│  Algorithm │ Token Type │ Key ID                          │
-├──────────────────────────────────────────────────────────┤
-│                    Token Claims                           │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │  agent-id: Globally unique agent identifier        │  │
-│  │  issuer: Identity provider that issued the token   │  │
-│  │  subject: User or organization the agent serves    │  │
-│  │  capabilities: Agent capability descriptors        │  │
-│  │  scopes: Authorized operation scopes               │  │
-│  │  issued-at: Token issuance timestamp               │  │
-│  │  expires-at: Token expiration timestamp            │  │
-│  │  delegation-chain: Parent agent references         │  │
-│  └────────────────────────────────────────────────────┘  │
-├──────────────────────────────────────────────────────────┤
-│                    Signature                              │
-│  Cryptographic signature from issuing authority           │
-└──────────────────────────────────────────────────────────┘
-~~~
-{: #figure-identity-token title="Agent Identity Token Structure"}
-
-The token format is based on JWT {{RFC7519}} with agent-specific claims.
+The token is cryptographically signed by the issuing authority.
 Agents MAY use the SD-JWT based identity mechanism defined in
 {{SD-AGENT}} to support selective disclosure of identity attributes
 during session establishment.
 
 ### Delegation Chains
 
-When an agent acts on behalf of another agent (e.g., a sub-agent
-invoked to handle a specialized task), the identity token includes
-a delegation chain that traces the authorization path:
+When an agent acts on behalf of another agent, the identity token
+includes a `delegation-chain` field tracing the authorization path
+(e.g., User → Coordinator → Researcher → Tool). Each entry records
+the granting agent and the scope granted. Receiving agents verify
+the complete chain to ensure each link has appropriate authorization.
 
-~~~
-Delegation Chain Example:
+## Agent Discovery {#agent-discovery}
 
-User "alice" → Agent "coordinator" → Agent "researcher" → Tool "web-search"
+Agents discover each other using MOQT's PUBLISH_NAMESPACE and
+SUBSCRIBE_NAMESPACE operations before establishing any PACE session.
+Discovery operates on the Agent Namespace scope defined in {{namespace}}.
+Each agent is identified by a globally unique agent-id (UUID),
+verifiable via the Agent Card (see {{agent-card}}).
 
-Each agent's token contains:
-  delegation-chain: [
-    { agent: "coordinator", scope: "research.execute", granted-by: "alice" },
-    { agent: "researcher", scope: "web.search", granted-by: "coordinator" }
-  ]
-~~~
+### Part 1: Discovering Agent Namespaces
 
-Receiving agents and tools can verify the complete delegation chain to
-ensure each link in the chain has appropriate authorization.
+Agents announce their presence by issuing PUBLISH_NAMESPACE on their
+namespace `("pace","agents",{agent-id})`. Other agents discover
+available peers by issuing SUBSCRIBE_NAMESPACE on the common prefix
+`("pace","agents")`. The relay forwards namespace announcements to
+matching subscribers, enabling Agent B to learn Agent A's namespace
+prefix without prior knowledge.
 
-## Agent Discovery
+If an agent-id is known out-of-band (e.g., from a registry or URL),
+agents MAY skip Part 1 and proceed directly to Part 2.
 
-PACE provides in-band agent discovery through MOQT's namespace
-operations, enabling agents to find and evaluate potential collaborators
-within a session context.
+### Part 2: Fetching Agent Card and Inbox
 
-### Discovery Protocol
+Once Agent B knows Agent A's namespace prefix, it issues
+SUBSCRIBE_NAMESPACE on `("pace","agents",{agent-a})` to discover A's
+tracks ("card", "inbox"). Agent B then subscribes to the "card" track
+to fetch A's Agent Card (capabilities, identity, authentication) and
+learns the "inbox" track where session invitations can be delivered.
 
-Agents advertise their presence using PUBLISH_NAMESPACE and discover
-others using SUBSCRIBE_NAMESPACE:
+### Agent Card {#agent-card}
 
-~~~
-Agent Discovery Flow:
+Each agent publishes an Agent Card on track `"card"` under its namespace
+`("pace","agents",{agent-id})`. When capabilities change, the agent
+publishes a new object (incrementing the group). Receivers SHOULD verify
+the card's signature and expiration before acting on its claims.
 
-Agent A                     MOQT Relay                     Agent B
-  │                             │                             │
-  │─ SUBSCRIBE_NAMESPACE ──────▶│                             │
-  │  (pace/{session}/discovery) │                             │
-  │                             │◀─ SUBSCRIBE_NAMESPACE ──────│
-  │                             │  (pace/{session}/discovery) │
-  │                             │                             │
-  │─ PUBLISH_NAMESPACE ────────▶│                             │
-  │  (pace/{session}/discovery/ │                             │
-  │   agent-a)                  │                             │
-  │                             │─ NAMESPACE ────────────────▶│
-  │                             │  (agent-a available)        │
-  │                             │                             │
-  │                             │◀─ PUBLISH_NAMESPACE ────────│
-  │                             │  (pace/{session}/discovery/ │
-  │                             │   agent-b)                  │
-  │◀─ NAMESPACE ────────────────│                             │
-  │  (agent-b available)        │                             │
-  │                             │                             │
-  │─ SUBSCRIBE ────────────────▶│─ SUBSCRIBE ────────────────▶│
-  │  (agent-b/capability-card)  │                             │
-  │◀─ OBJECT (Agent Card) ──────│◀─ OBJECT (Agent Card) ──────│
-~~~
-{: #figure-discovery title="Agent Discovery via MOQT Namespace Operations"}
+All Agent Cards MUST include:
 
-### Agent Capability Card
+* Agent identifier (UUID) and display name
+* Supported modalities and protocols
+* Authentication schemes
+* Identity claims (issuer, public key, expiration)
 
-Each agent publishes a capability card as an MOQT object on its
-discovery track. The card advertises the agent's identity, capabilities,
-supported modalities, and connection parameters. Agent cards MAY use
-the selective disclosure mechanism defined in {{SD-AGENT}} to enable
-privacy-preserving discovery where agents reveal only the claims
-necessary for a given interaction:
+The card format is protocol-specific. For A2A agents, see
+{{a2a-agent-card}}. Agent Cards MAY use selective disclosure
+{{SD-AGENT}} to reveal only claims necessary for a given interaction.
 
-~~~json
-{
-  "agent-id": "researcher-agent-01",
-  "name": "Research Assistant",
-  "description": "Specialized agent for web research and summarization",
-  "version": "1.2.0",
-  "identity": {
-    "issuer": "https://identity.example.com",
-    "public-key-id": "key-2026-06"
-  },
-  "capabilities": {
-    "modalities": ["text", "structured-data", "files"],
-    "streaming": true,
-    "multi-party": true,
-    "max-concurrent-tasks": 10
-  },
-  "supported-protocols": ["a2a", "mcp"],
-  "authentication": {
-    "schemes": ["bearer", "dpop", "mtls"],
-    "token-endpoint": "https://auth.example.com/agent/token"
-  },
-  "transport": {
-    "relay-endpoint": "moqt://relay.example.com:4443",
-    "namespace-prefix": "pace/session-123/researcher-agent-01",
-    "supported-extensions": ["pace-v1"]
-  }
-}
-~~~
+### Inbox Track {#inbox-track}
+
+Each agent subscribes to its own inbox track
+`("pace","agents",{agent-id}) -- "inbox"` upon connecting to the relay.
+Other agents publish session invitations to this track. Each inbox
+object contains a session-id and the initiator's agent-id. Late-joining
+agents receive cached inbox messages from the relay.
 
 # Multi-Modal Data Exchange {#data-exchange}
 
-PACE supports concurrent exchange of multiple data modalities within
-a single session, each with appropriate quality of service. This enables
-agents to simultaneously conduct text-based reasoning, stream audio/video,
-invoke tools, and transfer files.
+PACE supports concurrent exchange of multiple data modalities within a
+single session, each with appropriate quality of service.
 
 ## Modality Types
 
@@ -682,47 +581,14 @@ PACE defines the following data modality classes:
 
 ## Channel Architecture
 
-Each modality is mapped to dedicated MOQT tracks (channels) within the
-session namespace. Channels provide isolation between modalities while
-sharing the same session context and authorization.
-
-~~~
-Multi-Modal Channel Layout:
-
-Session Namespace: pace/{session-id}/{agent-id}/
-
-  ├── ctrl/                    (Session control)
-  │   ├── session              Track: session lifecycle messages
-  │   └── auth                 Track: authorization updates
-  │
-  ├── rt/                      (Real-time modalities)
-  │   ├── audio                Track: voice stream
-  │   ├── video                Track: video stream
-  │   └── screen               Track: screen share
-  │
-  ├── chat/                    (Semi-real-time)
-  │   ├── {conversation-id}    Track: chat messages
-  │   └── {stream-id}         Track: streaming LLM output
-  │
-  ├── ops/                     (Non-real-time operations)
-  │   ├── request              Track: outbound requests
-  │   ├── response             Track: responses
-  │   └── {operation-id}       Track: operation-specific data
-  │
-  ├── data/                    (Bulk data)
-  │   ├── {transfer-id}        Track: file transfers
-  │   └── context              Track: context/memory exchange
-  │
-  └── discovery/               (Agent discovery)
-      └── capability-card      Track: agent card
-~~~
-{: #figure-channels title="Multi-Modal Channel Layout"}
+Each modality maps to dedicated MOQT tracks within the Session
+Communication Namespace ({{namespace}}). Different modalities are
+isolated by track name while sharing session context and authorization.
 
 ## Priority and Quality of Service
 
-MOQT's 0-255 priority scale enables differentiated treatment of
-messages based on their urgency and modality. PACE defines the
-following priority tiers:
+MOQT's 0-255 priority scale enables differentiated treatment of messages
+based on urgency and modality. PACE defines the following priority tiers:
 
 | Priority Range | Category | Use |
 |----------------|----------|-----|
@@ -746,629 +612,260 @@ MOQT Group Order controls delivery sequencing within a track:
 
 ## Request/Response Pattern {#request-response}
 
-Request/response interactions use coordinated publish and subscribe
-operations through the MOQT relay:
-
-~~~
-Request/Response Flow:
-
-Client Agent              MOQT Relay               Server Agent
-     │                        │                         │
-     │── PUBLISH ────────────▶│── forward ─────────────▶│
-     │   (ops/request)        │                         │
-     │   Object: {            │                         │
-     │     req-id, method,    │                         │
-     │     params, auth-token │                         │
-     │   }                    │                         │
-     │                        │                         │
-     │── SUBSCRIBE ──────────▶│                         │
-     │   (ops/response/{id})  │                         │
-     │                        │                         │
-     │                        │    [Server processes]   │
-     │                        │                         │
-     │                        │◀── PUBLISH ─────────────│
-     │                        │   (ops/response/{id})   │
-     │◀── OBJECT ─────────────│                         │
-     │   (Response payload)   │                         │
-~~~
-{: #figure-request-response title="Request/Response Pattern"}
+Request/response interactions use coordinated publish operations.
+Agent A publishes a request object on its own track
+`("pace","agents","agent-a",{sid}) -- "ops/{req-id}"`. Agent B, which
+has subscribed to A's session namespace, receives the request, processes
+it, and publishes the response on its own corresponding track
+`("pace","agents","agent-b",{sid}) -- "ops/{req-id}"`. Agent A receives
+the response through its subscription to B's session namespace.
 
 ## Streaming Pattern {#streaming}
 
-Long-running operations produce incremental results as a stream of
-MOQT objects organized into groups representing execution phases:
+Long-running operations produce incremental results as MOQT objects
+organized into groups representing execution phases. The server advances
+to a new group at each phase transition (e.g., initialization, progress,
+completion). Multiple objects within a group represent incremental data
+for that phase.
 
-~~~
-Streaming Operation Flow:
-
-Client                   MOQT Relay                   Server
-  │                          │                          │
-  │── SUBSCRIBE ────────────▶│── SUBSCRIBE ────────────▶│
-  │   (ops/{operation-id})   │                          │
-  │                          │                          │
-  │                          │  [Group 0: Init]         │
-  │◀── Status: "started" ────│◀── Object 0 ────────────│
-  │                          │                          │
-  │                          │  [Group 1: Progress]     │
-  │◀── Data: partial ────────│◀── Object 0 ────────────│
-  │◀── Data: more ───────────│◀── Object 1 ────────────│
-  │                          │                          │
-  │                          │  [Group 2: Complete]     │
-  │◀── Data: final ──────────│◀── Object 0 ────────────│
-  │◀── Status: "done" ───────│◀── Object 1 ────────────│
-  │                          │                          │
-  │── UNSUBSCRIBE ──────────▶│── UNSUBSCRIBE ──────────▶│
-~~~
-{: #figure-streaming title="Streaming Operation with Groups"}
-
-Groups serve as synchronization points. The server advances to a new
-group when transitioning between execution phases. Late-joining
-subscribers receive the latest complete group from relay cache.
+Late-joining subscribers receive the latest complete group from relay
+cache, enabling mid-operation catch-up without replaying the full
+history.
 
 ## Real-Time Media Exchange
 
-For voice and video communication between agents (or between agents
-and humans), PACE maps media streams to dedicated real-time tracks
-with appropriate priority and delivery semantics:
-
-* Audio frames are published as individual MOQT objects with descending
-  group order (newest-first delivery for real-time playback)
-* Video frames use group-based organization where each group represents
-  a decodable unit (e.g., GOP)
-* MOQT's priority mechanism ensures media frames preempt lower-priority
-  data when bandwidth is constrained
+Audio and video streams use dedicated tracks (`"audio"`, `"video"`)
+with descending group order (newest-first) and high priority (32-63),
+ensuring media frames preempt lower-priority data under congestion.
 
 # Communication Topologies {#topologies}
 
 PACE supports multiple communication topologies through MOQT's relay
-infrastructure.
+fan-out:
 
-## Point-to-Point
-
-Direct communication between two agents through a relay:
-
-~~~
 Point-to-Point:
+: Two agents publish and subscribe to each other's session tracks.
+  Used for tool invocation, task delegation, and bilateral collaboration.
 
-  Agent A ──────▶ Relay ──────▶ Agent B
-         ◀──────        ◀──────
-~~~
+Point-to-Multipoint (Fan-Out):
+: One agent publishes; multiple agents subscribe. The relay handles
+  fan-out without the publisher maintaining per-subscriber state.
+  Used for broadcast notifications and shared context distribution.
 
-This is the simplest topology, used for tool invocation, simple task
-delegation, and bilateral collaboration.
-
-## Point-to-Multipoint (Fan-Out)
-
-One agent publishes to multiple subscribers through relay fan-out:
-
-~~~
-Point-to-Multipoint:
-
-                         ┌──▶ Agent B (subscriber)
-                         │
-  Agent A ──▶ Relay ─────┼──▶ Agent C (subscriber)
-  (publisher)            │
-                         └──▶ Agent D (subscriber)
-~~~
-
-This topology enables broadcast notifications, shared context
-distribution, and one-to-many task delegation where multiple agents
-observe the same operation.
-
-## Multi-Party Collaboration
-
-Multiple agents publish and subscribe within a shared session,
-enabling group collaboration:
-
-~~~
 Multi-Party:
+: All participants publish on their own tracks and subscribe to
+  each other's tracks within the same session-id. Adding a
+  participant requires publishing SESSION_JOIN on the control track;
+  existing participants receive the notification and subscribe to
+  the new agent's session namespace.
 
-  Agent A ◀──┐         ┌──▶ Agent A
-             │         │
-  Agent B ◀──┼─ Relay ─┼──▶ Agent B
-             │         │
-  Agent C ◀──┘         └──▶ Agent C
-
-  (All agents publish and subscribe to shared tracks)
-~~~
-
-Multi-party sessions use MOQT namespace operations to manage
-participant membership. Each participant publishes to their own
-tracks and subscribes to relevant tracks from other participants.
-
-### Participant Management
-
-Adding a participant to an active multi-party session:
-
-1. New agent establishes MOQT connection to the relay
-2. New agent publishes SESSION_JOIN on the session control track
-3. Existing participants receive the join notification
-4. Existing participants publish updated capability information
-5. New agent subscribes to relevant tracks from other participants
-6. Session state (participant list, shared context) is updated
-
-## Hierarchical Teams
-
-Agents can form hierarchical structures where a coordinator delegates
-subtasks to specialist agents:
-
-~~~
-Hierarchical Team:
-
-                     ┌──────────────┐
-                     │ Coordinator  │
-                     │    Agent     │
-                     └──────┬───────┘
-                            │
-              ┌─────────────┼─────────────┐
-              │             │             │
-       ┌──────▼─────┐ ┌────▼──────┐ ┌────▼──────┐
-       │ Researcher │ │  Writer   │ │ Reviewer  │
-       │   Agent    │ │  Agent    │ │   Agent   │
-       └──────┬─────┘ └───────────┘ └───────────┘
-              │
-       ┌──────▼─────┐
-       │ Web Search │
-       │   Tool     │
-       └────────────┘
-~~~
-
-Each level in the hierarchy operates as a separate PACE session with
-its own authorization scope. The coordinator's delegation chain is
-extended at each level, maintaining an auditable path from the
-original user authorization.
+Hierarchical Teams:
+: A coordinator creates child PACE sessions to delegate subtasks.
+  Each level operates as a separate session with narrowed authorization
+  scope. Delegation chains ({{identity-discovery}}) maintain an
+  auditable path from the original user authorization.
 
 # Authorization and Security {#authorization}
 
 ## Authorization Model
 
-PACE implements a fine-grained, behavior-driven authorization model
-where access tokens are scoped to specific operations an agent is
-permitted to perform.
+PACE implements a behavior-driven authorization model where access
+tokens are scoped to specific operations an agent is permitted to
+perform.
 
 ### Behavior-Driven Scopes
 
-Unlike traditional role-based access, PACE scopes are bound to
-specific agent behaviors:
-
-~~~
-Scope Structure:
-
-  {domain}:{resource}:{action}:{constraints}
-
-Examples:
-  research:web:search:max-queries=10
-  tools:filesystem:read:path=/data/*
-  agents:coordinator:delegate:max-depth=2
-  chat:session-123:send:modality=text
-  media:session-123:publish:type=audio,video
-~~~
-
-Scopes can include dynamic constraints that limit the scope based on
-runtime context (time bounds, resource limits, geographic restrictions).
+Scopes are structured as `{domain}:{resource}:{action}:{constraints}`,
+bound to specific agent behaviors rather than roles. Constraints
+support dynamic limits (time bounds, resource limits, counts).
 
 ### Delegated Authorization
 
-When agents invoke other agents or tools on behalf of a user, PACE
-supports delegated authorization that preserves the principle of
-least privilege:
+When agents invoke other agents, each delegation narrows the scope.
+Agent A (holding scope S) requests a sub-scope S' ⊂ S for Agent B.
+Agent B can further narrow to S'' ⊂ S' for downstream tools.
+Downstream agents cannot exceed their delegator's permissions.
 
-~~~
-Delegated Authorization Flow:
-
-User ──── grants scope S ────▶ Agent A
-                                  │
-                    Agent A requests sub-scope S' ⊂ S
-                                  │
-                                  ▼
-                Token Service issues S' token for Agent B
-                                  │
-                                  ▼
-              Agent A ── invokes with S' ──▶ Agent B
-                                              │
-                              Agent B requests S'' ⊂ S'
-                                              │
-                                              ▼
-                            Agent B ── uses S'' ──▶ Tool
-~~~
-{: #figure-delegated-auth title="Delegated Authorization"}
-
-Each delegation narrows the scope, ensuring downstream agents cannot
-exceed the permissions of their delegator. The complete delegation
-chain is verifiable by any participant.
-
-### Authorization Token Exchange
-
-Authorization tokens are exchanged during session establishment and
-can be refreshed during active sessions without interruption:
-
-1. Agent presents initial authorization token in SESSION_INIT
-2. Receiving agent validates the token and delegation chain
-3. If additional scopes are needed, agents negotiate via the auth
-   control channel
-4. Token refresh is performed proactively before expiration
+Authorization tokens are presented in SESSION_INIT and validated
+including the full delegation chain. Tokens are refreshed proactively
+before expiration.
 
 ### Confirmation and Evidence
 
 For high-risk operations, PACE supports confirmation requirements
-where an agent must present evidence that a human or authorized
-system has approved the action:
-
-* `confirmation-required`: Operation requires explicit approval
-* `evidence-type`: Type of evidence (human-approval, policy-check, mfa)
-* `evidence-token`: Cryptographic proof of confirmation
-
-This mechanism mitigates the impact of compromised agents or
-hallucination-driven actions by requiring out-of-band verification
-for sensitive operations.
+where agents must present cryptographic evidence of approval (human,
+policy-check, or MFA) before the operation proceeds.
 
 ## Transport Security
 
-All PACE communication is encrypted via TLS 1.3 as provided by the
-underlying QUIC connection. Additionally:
-
-* Agent identity tokens are cryptographically signed and verifiable
-* Session control messages are integrity-protected
-* Relay nodes operate on encrypted traffic without access to payload
-  content (unless explicitly authorized as trusted intermediaries)
-* MOQT's Common Access Token {{MoQ-C4M}} provides relay-level
-  authorization for namespace access
+All PACE communication is encrypted via TLS 1.3 (QUIC requirement).
+Agent identity tokens are cryptographically signed with short expiry.
+MOQT Common Access Tokens {{MoQ-C4M}} provide relay-level namespace
+authorization. Relay nodes cannot access payload content unless
+explicitly authorized as trusted intermediaries.
 
 ## Privacy Considerations
 
-* Agents SHOULD minimize the context and data shared in sessions to
-  what is necessary for the task
-* Session metadata (participant identities, timing, access patterns)
-  should be protected from unauthorized observation
-* Long-lived sessions SHOULD support forward secrecy through periodic
-  key rotation
-* Relay operators MUST NOT retain session content beyond the
-  operationally required caching period
-
-# Namespace Organization {#namespace}
-
-PACE uses MOQT's hierarchical namespace system for routing, isolation,
-and multiplexing of sessions and protocols.
-
-## Namespace Hierarchy
-
-~~~
-PACE Namespace Structure:
-
-pace / {session-id} / {agent-id} / {category} -- {track-name}
-
-Fields:
-  pace          Protocol identifier (fixed)
-  session-id    Unique session identifier
-  agent-id      Publishing agent's identifier
-  category      Message category (ctrl, rt, chat, ops, data, discovery)
-
-Track Name:
-  Specific identifier within the category (e.g., request-id,
-  stream-id, modality type)
-~~~
-{: #figure-namespace title="PACE Namespace Structure"}
-
-## Application Protocol Multiplexing
-
-Multiple application protocols can coexist within a single PACE
-session by using protocol-specific sub-categories:
-
-| Protocol | Category Prefix | Example Namespace |
-|----------|----------------|-------------------|
-| PACE Core | `ctrl`, `rt`, `discovery` | `pace/s1/agent-a/ctrl` |
-| A2A | `a2a` | `pace/s1/agent-a/a2a/task` |
-| MCP | `mcp` | `pace/s1/agent-a/mcp/tools` |
-| Custom | `ext/{protocol}` | `pace/s1/agent-a/ext/custom/rpc` |
-
-This enables agents speaking different application protocols to
-share the same session infrastructure while maintaining message
-isolation.
-
-## Relay Routing
-
-MOQT relays route subscriptions based on namespace prefixes. The
-hierarchical structure enables:
-
-* Session-level routing: All traffic for a session shares a prefix
-* Agent-level routing: Traffic to/from specific agents is identifiable
-* Category-level routing: Relays can apply different policies per category
-  (e.g., prioritize real-time, rate-limit bulk transfers)
+Agents SHOULD minimize shared data to what is necessary for the task.
+Long-lived sessions SHOULD support forward secrecy through periodic
+key rotation. Relay operators MUST NOT retain content beyond
+operational necessity.
 
 # MOQT Transport Binding Layer {#transport-binding}
 
-This section defines the concrete MOQT transport mechanics that
-underpin PACE sessions. While {{session-management}} defines session
-lifecycle and {{data-exchange}} defines multi-modal channels, this
-section specifies the precise mapping of protocol messages to MOQT
-primitives, including connection establishment sequences, message
-serialization formats, and operation-to-primitive mappings.
+This section defines how PACE maps to MOQT primitives: connection
+setup, namespace operations, message serialization, and operation
+mappings. All namespace and track references follow the structure
+defined in {{namespace}}.
 
 ## Connection Establishment {#connection-establishment}
 
-Agents using PACE MUST establish either a native QUIC connection
-or a WebTransport {{WebTransport}} session as defined in
-{{MoQ-TRANSPORT}}. For native QUIC connections, agents MUST use the
-ALPN value "moqt". For WebTransport, the protocol is negotiated using
-the "WT-Available-Protocols" mechanism as specified in {{MoQ-TRANSPORT}}.
+Agents MUST establish either a native QUIC connection or a WebTransport
+{{RFC9297}} session as defined in {{MoQ-TRANSPORT}}. For native QUIC
+connections, agents MUST use the ALPN value "moqt". For WebTransport,
+the protocol is negotiated using the "WT-Available-Protocols" mechanism
+as specified in {{MoQ-TRANSPORT}}.
 
-The connection setup follows this sequence:
+Upon establishing the MOQT session (CLIENT_SETUP / SERVER_SETUP), an
+agent performs the bootstrap sequence to make itself discoverable and
+ready to receive session invitations. This sequence is:
 
-~~~
-Agent A                                                   Agent B
-   |                                                        |
-   |──── QUIC/WebTransport Connection ─────────────────────▶|
-   |◄─── Connection Established ────────────────────────────|
-   |                                                        |
-   |──── MOQT CLIENT_SETUP ────────────────────────────────▶|
-   |     (ALPN: "moqt",                                     |
-   |      pace-version, agent-identity,                     |
-   |      supported-protocols, auth-schemes)                |
-   |◄─── MOQT SERVER_SETUP ─────────────────────────────────|
-   |     (pace-version, agent-identity,                     |
-   |      supported-protocols, session-capabilities)        |
-   |                                                        |
-   |──── PUBLISH_NAMESPACE (discovery) ────────────────────▶|
-   |◄─── PUBLISH_NAMESPACE (discovery) ─────────────────────|
-   |                                                        |
-   |──── Capability Card Exchange ─────────────────────────▶|
-   |◄─── Capability Card Exchange ──────────────────────────|
-   |                                                        |
-   |──── SESSION_INIT ─────────────────────────────────────▶|
-   |◄─── SESSION_ACCEPT ────────────────────────────────────|
-   |                                                        |
-   |◄═══ Protocol Message Exchange ════════════════════════▶|
-~~~
-{: #figure-connection title="MOQT Connection Establishment Sequence"}
+1. **Announce**: PUBLISH_NAMESPACE on `("pace", "agents", {agent-id})`
+2. **Publish Agent Card**: Publish on track `"card"` under its namespace
+3. **Subscribe to inbox**: Subscribe to its own `"inbox"` track
 
-During the MOQT setup phase, agents negotiate the PACE setup
-parameters defined in {{session-management}} (pace-version,
-agent-identity, supported-protocols, auth-schemes, and
-session-capabilities) as MOQT extensions in CLIENT_SETUP and
-SERVER_SETUP messages.
+See {{agent-discovery}} for the full discovery flow that follows
+bootstrap.
 
 ## Track Organization {#track-organization}
 
-Agent protocol messages are mapped to MOQT tracks using a hierarchical
-namespace structure as defined in {{MoQ-TRANSPORT}}. MOQT namespaces
-consist of 1-32 ordered tuple fields, enabling relays to route based
-on hierarchical prefixes.
+Each agent publishes exclusively on its own tracks. Other agents
+subscribe to tracks they are interested in. The relay handles fan-out
+to all subscribers. This per-agent publishing model ensures clear
+ownership and enables relay caching.
 
-### Full Track Name Structure
-
-~~~
-Full Track Name Structure:
-
-Track Namespace (tuple fields):
-┌──────────┬──────────┬────────────┬──────────────┐
-│ Field 1  │ Field 2  │  Field 3   │   Field 4    │
-│ protocol │ session  │  agent-id  │   category   │
-└──────────┴──────────┴────────────┴──────────────┘
-
-Track Name:
-┌────────────────────────────────────────────────┐
-│              action or identifier              │
-└────────────────────────────────────────────────┘
-
-Example Full Track Names:
-  pace / session-123 / agent-alice / ops/request  -- req-001
-  pace / session-123 / agent-bob / discovery      -- capability-card
-  pace / session-123 / agent-alice / a2a/stream   -- task-456
-  pace / session-123 / agent-alice / mcp/tools    -- read-file
-~~~
-{: #figure-track-names title="Full Track Name Structure"}
-
-The first namespace field is always "pace" identifying the protocol.
-Subsequent fields provide session routing, agent identification, and
-category-based message classification as defined in {{namespace}}.
-
-### Track Category Mechanics
-
-Tracks are organized into categories that map to MOQT publish/subscribe
-operations:
-
-| Category | Direction | MOQT Mechanism | Purpose |
-|----------|-----------|----------------|---------|
-| ctrl | Bidirectional | PUBLISH + SUBSCRIBE | Session lifecycle |
-| discovery | Publish | PUBLISH_NAMESPACE + OBJECT | Agent advertisement |
-| ops/request | Client→Server | PUBLISH + OBJECT | Request messages |
-| ops/response | Server→Client | PUBLISH + OBJECT | Response messages |
-| rt | Bidirectional | Continuous PUBLISH | Real-time media |
-| chat | Bidirectional | PUBLISH + OBJECT | Chat/streaming text |
-| data | Bidirectional | PUBLISH + OBJECT(s) | Bulk transfers |
-
-Subscribers discover available tracks within a category using
-SUBSCRIBE_NAMESPACE on the category prefix, receiving NAMESPACE
-announcements as new tracks appear.
+Namespace structure and track names are defined in {{namespace}}.
+Participants discover each other's session tracks using
+SUBSCRIBE_NAMESPACE on `("pace", "agents", {peer-agent-id}, {sid})`.
 
 ## Message Serialization {#message-serialization}
 
-Agent protocol messages are serialized and encapsulated within MOQT
-objects. Each MOQT object contains a header (managed by the MOQT
-layer) and a protocol-specific payload:
+Protocol messages are encapsulated within MOQT objects using a PACE
+envelope prepended to the payload:
 
-~~~
-MOQT Object Structure:
+| Field | Size | Description |
+|-------|------|-------------|
+| `version` | 1 byte | PACE envelope version (currently 0x01) |
+| `flags` | 1 byte | 0x01=compressed, 0x02=fragmented, 0x04=encrypted |
+| `length` | varint | Length of the serialized protocol message |
+| payload | variable | Serialized protocol message |
 
-┌─────────────────────────────────────────────────────────┐
-│                 MOQT Object Header                      │
-│  Track ID │ Group ID │ Object ID │ Priority │ TTL      │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│              PACE Message Envelope                      │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │  version (1 byte) │ flags (1 byte) │ length (varint)││
-│  ├─────────────────────────────────────────────────────┤│
-│  │         Serialized Protocol Message                 ││
-│  │  (JSON-RPC 2.0, JSON, or protocol-specific format)  ││
-│  └─────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────┘
-~~~
-{: #figure-object-structure title="MOQT Object Structure with PACE Envelope"}
-
-The PACE message envelope prepends minimal framing:
-
-* `version` (1 byte): PACE envelope version (currently 0x01)
-* `flags` (1 byte): Message flags (0x01=compressed, 0x02=fragmented,
-  0x04=encrypted)
-* `length` (varint): Length of the serialized protocol message
-
-Protocol bindings SHOULD preserve native message formats where possible
-to maintain compatibility with existing protocol implementations. For
-example, A2A messages retain their JSON-RPC 2.0 format; the PACE
-envelope simply wraps the serialized JSON bytes.
+Bindings SHOULD preserve native message formats. For example, A2A
+messages retain their JSON-RPC 2.0 format; the PACE envelope wraps
+the serialized JSON bytes.
 
 ## Operation-to-Primitive Mapping {#operation-mapping}
 
-The following table provides the complete mapping of common agent
-communication patterns to MOQT primitives:
+Mapping of PACE operations to MOQT primitives:
 
-| Operation Pattern | MOQT Mechanism | Description |
-|-------------------|----------------|-------------|
-| One-shot request | PUBLISH + OBJECT | Single request published to a track |
-| Streaming request | PUBLISH + multiple OBJECTs | Request with incremental data across objects |
-| Resource fetch | SUBSCRIBE + OBJECT | Subscribe to retrieve a specific resource |
-| Resource listing | SUBSCRIBE_NAMESPACE | Discover available resources via namespace |
-| Cancellation | OBJECT on control track | Cancel signal published to control track |
-| Subscription | SUBSCRIBE (ongoing) | Long-lived subscription for updates |
-| Notification push | PUBLISH to subscriber track | Server-initiated event delivery |
-| Discovery | PUBLISH_NAMESPACE + SUBSCRIBE_NAMESPACE | In-band agent/service discovery |
-| Broadcast | PUBLISH + relay fan-out | One-to-many distribution |
+| Operation | MOQT Mechanism | Namespace / Track |
+|-----------|----------------|-------------------|
+| Agent discovery | PUBLISH_NS + SUBSCRIBE_NS | `("pace","agents")` prefix |
+| Fetch Agent Card | SUBSCRIBE + OBJECT | `("pace","agents",{id}) -- "card"` |
+| Session discovery | SUBSCRIBE_NS | `("pace","discovery","sessions")` prefix |
+| Session invite | PUBLISH to inbox | `("pace","agents",{id}) -- "inbox"` |
+| Join session | SUBSCRIBE_NS on peer | `("pace","agents",{peer},{sid})` |
+| One-shot request | PUBLISH + OBJECT | `("pace","agents",{id},{sid}) -- "ops/{req-id}"` |
+| Streaming | PUBLISH + multiple OBJECTs | `-- "a2a/stream/{id}"` (groups) |
+| Cancellation | OBJECT on ctrl | `-- "ctrl"` |
+| Subscription | SUBSCRIBE (ongoing) | `-- "a2a/task/{id}"` |
+| Broadcast | PUBLISH + relay fan-out | Any track (relay fans out) |
 
 # Protocol Bindings {#protocol-bindings}
 
-This section defines concrete protocol bindings that map application
-protocol semantics to the MOQT transport layer defined in
-{{transport-binding}}. Each binding operates within PACE sessions
-({{session-management}}) and uses the channel architecture defined
-in {{data-exchange}}.
+This section defines protocol bindings that map application protocol
+semantics to MOQT. Each binding operates within PACE sessions, using
+the Session Communication Namespace ({{namespace}}) and channel
+architecture ({{data-exchange}}).
 
 ## Binding Architecture
 
-~~~
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Agent Applications                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
-│  │ A2A Agent   │  │ MCP Host    │  │ AutoGen     │  │ Custom      │ │
-│  │             │  │             │  │ Agent       │  │ Agent       │ │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘ │
-└─────────┼────────────────┼────────────────┼────────────────┼────────┘
-          │                │                │                │
-┌─────────▼────────────────▼────────────────▼────────────────▼────────┐
-│                 Protocol Binding Layer                               │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
-│  │ A2A Binding │  │ MCP Binding │  │ AutoGen     │  │ Generic     │ │
-│  │ (§7.2)      │  │ (§7.3)      │  │ Binding     │  │ JSON-RPC    │ │
-│  │             │  │             │  │ (§7.4)      │  │ (§7.5)      │ │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘ │
-└─────────┼────────────────┼────────────────┼────────────────┼────────┘
-          │                │                │                │
-┌─────────▼────────────────▼────────────────▼────────────────▼────────┐
-│              PACE Session Layer (§3, §4, §5)                        │
-│     Session Mgmt │ Identity │ Authorization │ Multi-Modal Channels   │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-┌─────────────────────────────────▼───────────────────────────────────┐
-│              MOQT Transport Binding (§6)                            │
-│   Connection │ Track Org │ Serialization │ Priority │ Operations    │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-┌─────────────────────────────────▼───────────────────────────────────┐
-│                    QUIC / WebTransport                               │
-│     Encryption (TLS 1.3) │ Multiplexing │ Connection Migration      │
-└─────────────────────────────────────────────────────────────────────┘
-~~~
-{: #figure-binding-arch title="Protocol Binding Architecture"}
+Protocol bindings sit between application protocols and the PACE session
+layer. Each binding defines:
 
-Each protocol binding defines:
-
-* **Protocol Identifier**: Unique string (e.g., "a2a", "mcp") used
-  in the namespace category field
-* **Version**: Protocol version supported by the binding
-* **Namespace Pattern**: How protocol operations map to PACE
-  namespace categories and track names
-* **Message Serialization**: Encoding of protocol messages within
-  MOQT object payloads
+* **Protocol Identifier**: Unique string used as the track name prefix
+* **Namespace Pattern**: How operations map to track names
+* **Message Serialization**: Encoding within MOQT object payloads
 * **Operation Mapping**: Protocol operations to MOQT primitives
-* **Priority Mapping**: Protocol message types to PACE priority tiers
+* **Priority Mapping**: Message types to PACE priority tiers
 
-Different protocols use distinct namespace categories within PACE
-sessions:
+Protocols use distinct track name prefixes within PACE sessions:
 
-| Protocol | Namespace Category | Example Full Namespace | Example Track Name |
-|----------|-------------------|------------------------|-------------------|
-| A2A | `a2a/{subcategory}` | `pace/s1/agent-a/a2a/task` | `t1` |
-| MCP | `mcp/{subcategory}` | `pace/s1/fs-server/mcp/tools` | `read` |
-| AutoGen | `autogen/{subcategory}` | `pace/s1/rt1/autogen/agent` | `msg` |
-| Generic | `ext/{proto}/{subcategory}` | `pace/s1/custom/ext/myproto/rpc` | `call` |
+| Protocol | Track Prefix | Example Full Path |
+|----------|--------------|-------------------|
+| A2A | `a2a/` | `("pace","agents","agent-a","s1") -- "a2a/task/t1"` |
+| MCP | `mcp/` | `("pace","agents","fs-server","s1") -- "mcp/tools/read"` |
+| AutoGen | `autogen/` | `("pace","agents","rt1","s1") -- "autogen/message/conv1"` |
+| Generic | `ext/{proto}/` | `("pace","agents","agent-a","s1") -- "ext/myproto/rpc/call"` |
 
 ## A2A Binding {#a2a-binding}
 
-The Agent-to-Agent Protocol {{A2A}} binding maps A2A's task delegation
-and collaboration semantics to MOQT primitives. This binding operates
-within PACE sessions using the `a2a/` category prefix.
+The Agent-to-Agent Protocol {{A2A}} binding maps A2A task delegation
+and collaboration to MOQT primitives using the `a2a/` category prefix.
 
 ### Namespace Structure
 
-A2A uses the following namespace hierarchy within an PACE session:
+A2A operates within a PACE session. Each agent publishes A2A messages
+on tracks under its own session namespace:
 
 ~~~
-pace/{session-id}/{agent-id}/a2a/{subcategory} -- {track-name}
+Namespace: ("pace", "agents", {agent-id}, {session-id})
+Tracks:    "a2a/{subcategory}/{identifier}"
 ~~~
 
-Where `subcategory` identifies the A2A message class:
+A2A track name patterns:
 
-| Subcategory | Purpose | Track Name Pattern |
-|-------------|---------|-------------------|
-| request | Outbound requests | `{request-id}` |
-| response | Request responses | `{request-id}` |
-| stream | Streaming operations | `{request-id}` |
-| task | Task lifecycle | `{task-id}` |
-| notify | Push notifications | `{notification-type}` |
-| discovery | Agent cards | `agent-card` |
+| Track Pattern | Purpose |
+|---------------|---------|
+| `a2a/request/{request-id}` | Outbound requests |
+| `a2a/response/{request-id}` | Request responses |
+| `a2a/stream/{request-id}` | Streaming operations |
+| `a2a/task/{task-id}` | Task lifecycle |
+| `a2a/notify/{type}` | Push notifications |
 
 ### A2A Operation Mapping {#a2a-operation-mapping}
 
-The following table maps A2A v0.3.0 operations to MOQT primitives.
-The Generic Pattern column references patterns from {{operation-mapping}}.
+The following table maps A2A v0.3.0 operations to MOQT primitives:
 
-| A2A Operation | MOQT Mechanism | Track Pattern | Generic Pattern |
-|---------------|----------------|---------------|-----------------|
-| `SendMessage` | PUBLISH + OBJECT | `a2a/request -- {req-id}` | One-shot request |
-| `SendStreamingMessage` | PUBLISH + multiple OBJECTs | `a2a/stream -- {req-id}` | Streaming request |
-| `GetTask` | SUBSCRIBE + OBJECT fetch | `a2a/task -- {task-id}` | Resource fetch |
-| `ListTasks` | SUBSCRIBE_NAMESPACE | `a2a/task` | Resource listing |
-| `CancelTask` | OBJECT on control track | `ctrl/cancel -- {task-id}` | Cancellation |
-| `SubscribeToTask` | SUBSCRIBE (ongoing) | `a2a/task -- {task-id}` | Subscription |
-| `GetExtendedAgentCard` | SUBSCRIBE + OBJECT | `discovery -- agent-card` | Resource fetch |
-| `SetPushNotificationConfig` | PUBLISH + OBJECT | `a2a/notify -- config` | One-shot request |
-| `GetPushNotificationConfig` | SUBSCRIBE + OBJECT | `a2a/notify -- config` | Resource fetch |
+| A2A Operation | MOQT Mechanism | Track Name |
+|---------------|----------------|------------|
+| `SendMessage` | PUBLISH + OBJECT | `a2a/request/{req-id}` |
+| `SendStreamingMessage` | PUBLISH + multiple OBJECTs | `a2a/stream/{req-id}` |
+| `GetTask` | SUBSCRIBE + OBJECT | `a2a/task/{task-id}` |
+| `ListTasks` | SUBSCRIBE_NAMESPACE | (discover `a2a/task/*` tracks) |
+| `CancelTask` | OBJECT on ctrl track | `ctrl` |
+| `SubscribeToTask` | SUBSCRIBE (ongoing) | `a2a/task/{task-id}` |
+| `GetExtendedAgentCard` | SUBSCRIBE + OBJECT | Agent's `card` track |
+| `SetPushNotificationConfig` | PUBLISH + OBJECT | `a2a/notify/config` |
+| `GetPushNotificationConfig` | SUBSCRIBE + OBJECT | `a2a/notify/config` |
 
 ### Message Format
 
-A2A messages are serialized as JSON-RPC 2.0 payloads within MOQT objects.
-The binding preserves A2A's native message format without transformation:
+A2A messages are serialized as JSON-RPC 2.0 within MOQT objects,
+preserving A2A's native format. The PACE envelope wraps the JSON bytes:
 
-~~~
-MOQT Object Payload for A2A:
-
-┌─────────────────────────────────────────────────────┐
-│  PACE Envelope (version=0x01, flags=0x00)           │
-├─────────────────────────────────────────────────────┤
-│  {                                                  │
-│    "jsonrpc": "2.0",                                │
-│    "method": "message/send",                        │
-│    "params": {                                      │
-│      "message": {                                   │
-│        "role": "user",                              │
-│        "parts": [                                   │
-│          {"kind": "text", "text": "Hello agent"}    │
-│        ]                                            │
-│      }                                              │
-│    },                                               │
-│    "id": "req-001"                                  │
-│  }                                                  │
-└─────────────────────────────────────────────────────┘
+~~~json
+{
+  "jsonrpc": "2.0",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "role": "user",
+      "parts": [{"kind": "text", "text": "Hello agent"}]
+    }
+  },
+  "id": "req-001"
+}
 ~~~
 
 ### Priority Mapping
@@ -1387,70 +884,30 @@ MOQT Object Payload for A2A:
 ### Streaming Support
 
 A2A streaming operations (SendStreamingMessage, task subscriptions) use
-MOQT groups and objects following the streaming pattern in {{streaming}}.
-
-A2A defines two streaming event types:
-
-TaskStatusUpdateEvent:
-: Published when task state changes. Contains task ID, current state
-  (queued, running, completed, failed, canceled), and optional message.
-
-TaskArtifactUpdateEvent:
-: Published when task produces output. Contains artifact data (text,
-  files, structured data) with incremental or complete delivery.
-
-The mapping to MOQT objects:
+the streaming pattern defined in {{streaming}}. A2A streaming events map
+to MOQT objects as follows:
 
 * Each streaming response creates a new MOQT group
-* Incremental updates are individual objects within the group
-* TaskStatusUpdateEvent and TaskArtifactUpdateEvent map to objects
+* TaskStatusUpdateEvent (state changes) and TaskArtifactUpdateEvent
+  (output data) are individual objects within groups
 * Groups represent execution phases (initialization, progress, completion)
 
 ### A2A Agent Card with MOQT Extension {#a2a-agent-card}
 
-Per A2A v0.3.0, each agent publishes an Agent Card containing identity,
-capabilities, and supported operations. When operating over PACE, the
-card includes a `moqt` extension block providing MOQT-specific
-connectivity information:
+When operating over PACE, the A2A Agent Card includes a `moqt` extension
+block:
 
 ~~~json
 {
   "name": "research-assistant",
-  "description": "Specialized research and analysis agent",
-  "url": "https://example.com/agents/research",
   "protocolVersion": "0.3.0",
-  "capabilities": {
-    "streaming": true,
-    "pushNotifications": true,
-    "stateTransitionHistory": true
-  },
-  "skills": [
-    {
-      "id": "web-research",
-      "name": "Web Research",
-      "description": "Search and summarize web content"
-    },
-    {
-      "id": "data-analysis",
-      "name": "Data Analysis",
-      "description": "Analyze structured datasets"
-    }
-  ],
-  "authentication": {
-    "schemes": ["bearer", "oauth2"],
-    "credentials": [
-      {
-        "type": "oauth2",
-        "authorizationUrl": "https://auth.example.com/authorize",
-        "tokenUrl": "https://auth.example.com/token",
-        "scopes": ["agent:invoke", "task:read"]
-      }
-    ]
-  },
+  "capabilities": {"streaming": true, "pushNotifications": true},
+  "skills": [{"id": "web-research", "name": "Web Research"}],
+  "authentication": {"schemes": ["bearer", "oauth2"]},
   "moqt": {
     "relayEndpoint": "moqt://relay.example.com:4443",
     "webTransportEndpoint": "https://relay.example.com:4443/moqt",
-    "namespace": "pace/session-123/research-assistant",
+    "namespace": ["pace", "agents", "research-assistant"],
     "supportedExtensions": ["pace-v1"],
     "maxConcurrentSubscriptions": 100,
     "cacheTTL": 300
@@ -1461,101 +918,54 @@ connectivity information:
 
 The `moqt` extension fields:
 
-* `relayEndpoint`: Native QUIC endpoint for the MOQT relay
-* `webTransportEndpoint`: WebTransport endpoint (alternative connectivity)
-* `namespace`: Agent's PACE namespace prefix
-* `supportedExtensions`: MOQT/PACE extensions supported
-* `maxConcurrentSubscriptions`: Maximum subscriptions the agent handles
-* `cacheTTL`: Recommended cache duration for the agent card (seconds)
+| Field | Description |
+|-------|-------------|
+| `relayEndpoint` | Native QUIC endpoint for the MOQT relay |
+| `webTransportEndpoint` | WebTransport endpoint (alternative connectivity) |
+| `namespace` | Agent's namespace prefix as array |
+| `supportedExtensions` | MOQT/PACE extensions supported |
+| `maxConcurrentSubscriptions` | Maximum subscriptions the agent handles |
+| `cacheTTL` | Cache duration for the agent card (seconds) |
 
 ## MCP Binding {#mcp-binding}
 
-The Model Context Protocol {{MCP}} can be transported over PACE to
-enable tool and resource access for agents. The complete specification
-for MCP over MOQT is defined in {{MCP-MOQT}}.
-
-### Namespace Structure
-
-MCP uses the `mcp/` category prefix within PACE sessions:
+The Model Context Protocol {{MCP}} binding enables tool and resource
+access for agents. Within a PACE session, MCP tracks use the `"mcp/"`
+prefix under the agent's session namespace:
 
 ~~~
-pace/{session-id}/{server-id}/mcp/{subcategory} -- {track-name}
+Namespace: ("pace", "agents", {server-id}, {session-id})
+Tracks:    "mcp/{subcategory}/{identifier}"
 ~~~
 
-| Subcategory | Purpose | Track Name Pattern |
-|-------------|---------|-------------------|
-| control | Session/capability mgmt | `initialize`, `capabilities` |
-| tools | Tool invocations | `{tool-name}` |
-| resources | Resource access | `{resource-uri}` |
-| prompts | Prompt templates | `{prompt-name}` |
-| notifications | Async events | `{event-type}` |
-
-### MCP Operation Mapping
-
-| MCP Operation | MOQT Mechanism | Track Pattern |
-|---------------|----------------|---------------|
-| `initialize` | PUBLISH + OBJECT | `mcp/control -- initialize` |
-| `tools/list` | SUBSCRIBE_NAMESPACE | `mcp/tools` |
-| `tools/call` | PUBLISH + OBJECT (req/resp) | `mcp/tools -- {tool-name}` |
-| `resources/list` | SUBSCRIBE_NAMESPACE | `mcp/resources` |
-| `resources/read` | SUBSCRIBE + OBJECT | `mcp/resources -- {uri}` |
-| `resources/subscribe` | SUBSCRIBE (ongoing) | `mcp/resources -- {uri}` |
-| `prompts/list` | SUBSCRIBE_NAMESPACE | `mcp/prompts` |
-| `prompts/get` | SUBSCRIBE + OBJECT | `mcp/prompts -- {name}` |
-| `notifications/*` | PUBLISH to subscriber | `mcp/notifications -- {type}` |
-
-### MCP Priority Mapping
-
-| MCP Message Type | MOQT Priority Range |
-|------------------|---------------------|
-| Cancellation | 0-31 |
-| Tool call response | 32-63 |
-| Tool call request | 64-95 |
-| Resource updates | 96-127 |
-| Capability exchange | 128-159 |
-| Notifications | 160-191 |
-| Bulk resource fetch | 192-255 |
-
-### Agent Skills over MOQT
-
-{{MCP-MOQT}} defines an Agent Skills architecture (Section 6) that
-extends AI capabilities beyond atomic tool operations. Skills provide
-composed instructions for complex tasks and use progressive loading
-(metadata, instructions, resources) that aligns naturally with MOQT's
-object-based delivery, enabling efficient bandwidth utilization and
-aggressive caching. The specification also describes relay support
-(Section 5) for scalable MCP deployments, including subscription
-aggregation where multiple client subscriptions are consolidated into
-single upstream requests, and content caching strategies optimized for
-AI workflows.
+The complete MCP over MOQT specification — including track structure,
+operation mapping, message serialization, Agent Skills architecture,
+and relay support — is defined in {{MCP-MOQT}}. PACE adopts that
+specification's track semantics, mapping its namespace tuples (e.g.,
+`(mcp, {session-id}, tools) -- ({tool-name})`) into PACE track names
+(e.g., `"mcp/tools/{tool-name}"`) as described in {{namespace}}.
 
 ## AutoGen Binding {#autogen-binding}
 
-AutoGen {{AutoGen}} is a multi-agent conversation framework that enables
-complex LLM applications through agent collaboration. This binding
-defines how AutoGen's conversation patterns map to MOQT within PACE
+AutoGen {{AutoGen}} is a multi-agent conversation framework. This
+binding maps AutoGen's conversation patterns to MOQT within PACE
 sessions.
 
 ### Namespace Structure
 
-AutoGen uses the `autogen/` category prefix:
-
 ~~~
-pace/{session-id}/{runtime-id}/autogen/{subcategory} -- {track-name}
+Namespace: ("pace", "agents", {runtime-id}, {session-id})
+Tracks:    "autogen/{subcategory}/{identifier}"
 ~~~
 
-Where:
+Where `runtime-id` is the AutoGen runtime instance identifier.
 
-* `session-id`: PACE session identifier
-* `runtime-id`: AutoGen runtime instance identifier
-* `subcategory`: Message class within the AutoGen binding
-
-| Subcategory | Purpose | Track Name Pattern |
-|-------------|---------|-------------------|
-| message | Inter-agent messages | `{conversation-id}` |
-| control | Runtime control | `{command}` |
-| state | Agent state sync | `{state-key}` |
-| result | Final outputs | `{task-id}` |
+| Track Pattern | Purpose |
+|---------------|---------|
+| `autogen/message/{conversation-id}` | Inter-agent messages |
+| `autogen/control/{command}` | Runtime control |
+| `autogen/state/{state-key}` | Agent state sync |
+| `autogen/result/{task-id}` | Final outputs |
 
 ### Message Format
 
@@ -1587,8 +997,9 @@ Group Chat:
   the coordinator's broadcast track.
 
 Nested Chat:
-: Hierarchical namespaces enable nested conversations:
-  `autogen/{session}/runtime-1/outer-agent/inner-runtime/inner-agent`
+: Hierarchical conversations use nested session-ids. An outer agent
+  creates a child PACE session for the inner conversation, linking
+  it to the parent via delegation chains.
 
 ### Priority Mapping
 
@@ -1603,31 +1014,23 @@ Nested Chat:
 
 ## Generic JSON-RPC Binding {#jsonrpc-binding}
 
-This binding provides a minimal baseline for custom agent protocols
-that use JSON-RPC 2.0 messaging. It serves as an extensible foundation
-for protocols not covered by specific bindings.
+This binding provides a baseline for custom protocols using JSON-RPC 2.0
+messaging.
 
 ### Namespace Structure
 
-Generic protocols use the `ext/` category prefix with their protocol
-identifier:
-
 ~~~
-pace/{session-id}/{agent-id}/ext/{protocol-name}/{subcategory} -- {track-name}
+Namespace: ("pace", "agents", {agent-id}, {session-id})
+Tracks:    "ext/{protocol-name}/{subcategory}/{identifier}"
 ~~~
 
-Where:
+Where `protocol-name` is the custom protocol identifier.
 
-* `protocol-name`: Custom protocol identifier
-* `subcategory`: Protocol-defined message class
-
-### Track Categories
-
-| Category | Purpose | Track Name Pattern |
-|----------|---------|-------------------|
-| rpc | Request/response | `{request-id}` |
-| stream | Streaming data | `{stream-id}` |
-| event | Async events | `{event-type}` |
+| Track Pattern | Purpose |
+|---------------|---------|
+| `ext/{proto}/rpc/{request-id}` | Request/response |
+| `ext/{proto}/stream/{stream-id}` | Streaming data |
+| `ext/{proto}/event/{event-type}` | Async events |
 
 ### Message Format
 
@@ -1644,174 +1047,47 @@ Messages follow standard JSON-RPC 2.0:
 
 ### Extension Mechanism
 
-Custom protocols extend this binding by:
-
-1. Defining additional track subcategories
-2. Specifying custom message schemas within the JSON-RPC params
-3. Registering protocol-specific priorities
-4. Adding custom metadata in MOQT extension headers
-
-Implementations SHOULD document their extensions and MAY register
-them in the IANA PACE Protocol Binding Registry.
+Custom protocols extend this binding by defining additional track
+subcategories, custom message schemas within JSON-RPC params,
+protocol-specific priorities, and custom MOQT extension headers.
+Implementations SHOULD document extensions and MAY register them
+in the IANA PACE Protocol Binding Registry.
 
 ## Multi-Agent Orchestration Patterns {#orchestration}
 
-The binding layer supports common multi-agent coordination patterns.
-Each pattern leverages MOQT's pub/sub and relay capabilities:
+Common coordination patterns built on PACE sessions and MOQT fan-out:
 
-### Sequential Orchestration
+Sequential:
+: Each agent subscribes to its predecessor's response track and
+  publishes to the next agent's request track, forming a pipeline.
 
-Agents execute tasks in sequence, each passing results to the next:
+Concurrent (Broadcast):
+: A coordinator publishes a single request; relay fan-out delivers
+  it to all subscribing specialists. Results are published back to
+  tracks the coordinator subscribes to.
 
-~~~
-Sequential Pattern:
+Handoff:
+: Agent A publishes a HANDOFF message on the control track. Agent B
+  subscribes to the task track, receives cached context from the
+  relay, and continues execution without explicit state transfer.
 
-Agent A ──result──▶ Agent B ──result──▶ Agent C
-  │                    │                    │
-  └─ publish to ──────▶└─ subscribe + ─────▶└─ subscribe +
-     B's request         publish to           publish to
-     track               C's request          result track
-                         track
-~~~
+Hierarchical:
+: Coordinators create child PACE sessions for sub-task delegation.
+  Delegation chains ensure authorization propagates through the
+  hierarchy (see {{topologies}}).
 
-Each agent subscribes to its predecessor's response track and publishes
-to the next agent's request track. MOQT groups track pipeline stages.
-
-### Concurrent (Broadcast) Pattern
-
-A coordinator distributes work to multiple agents simultaneously:
-
-~~~
-Concurrent Pattern:
-
-                 ┌──▶ Agent B (specialist)
-                 │       │
-Coordinator ─────┼──▶ Agent C (specialist)
-  (publish)      │       │
-                 └──▶ Agent D (specialist)
-                         │
-                 ◀── all subscribe to ───┘
-                     coordinator's
-                     result aggregation track
-~~~
-
-The coordinator publishes a single request object; MOQT relay fan-out
-delivers it to all subscribing specialists. Results are published back
-to a shared aggregation track.
-
-### Handoff Pattern
-
-An agent transfers an active task to another agent:
-
-~~~
-Handoff Pattern:
-
-Agent A ══task══▶ [publishes HANDOFF on ctrl track]
-                       │
-                       ▼
-               Agent B subscribes to task track,
-               receives cached context from relay,
-               continues execution
-~~~
-
-The handoff leverages MOQT's relay caching — Agent B receives the full
-task context (prior groups) upon subscribing, enabling seamless
-continuation without explicit state transfer.
-
-### Hierarchical Teams
-
-See {{topologies}} for topology description. In the binding layer,
-hierarchical teams use nested PACE sessions where each coordinator
-maintains a parent session and creates child sessions for sub-task
-delegation. Delegation chains ({{identity-discovery}}) ensure
-authorization propagates correctly through the hierarchy.
-
-# Benefits of MOQT for Agent Communication {#benefits}
-
-MOQT provides significant advantages over traditional agent transports,
-particularly for real-time collaboration and large-scale deployments.
-
-| Feature | HTTP/JSON-RPC | gRPC | REST/SSE | MOQT (PACE) |
-|---------|---------------|------|----------|--------------|
-| Pub/Sub Native | No | Limited | No | Yes |
-| Multi-party Broadcast | Polling | N/A | Fan-out only | Native fan-out |
-| Relay/CDN Support | Separate infra | N/A | CDN possible | Built-in |
-| Priority QoS | Application layer | Per-stream | None | Per-object (0-255) |
-| Connection Migration | No | Limited | No | QUIC native |
-| Late Join Support | N/A | N/A | N/A | Group-based |
-| Streaming Granularity | Message-level | Stream | SSE events | Object/Group |
-| Discovery Mechanism | Well-known URI | Service registry | Well-known URI | SUBSCRIBE_NAMESPACE |
-| Session Recovery | Re-establish | Reconnect | Reconnect | Relay cache + resume |
-| Multi-Modal Concurrent | Multiple conns | Multiple streams | Multiple conns | Single session |
-
-MOQT enables real-time agent communication through low-latency
-streaming, priority-based message delivery, and built-in flow control
-that prevents overload during high-volume interactions.
-
-The publish/subscribe model provides scalability through one-to-many
-broadcasts, dynamic in-band discovery via SUBSCRIBE_NAMESPACE, and
-relay-based distribution that prevents connection explosion in large
-mesh networks.
-
-MOQT delivers reliability and resilience via QUIC connection migration,
-relay caching for recovery from transient disconnections, session
-suspension/resumption, and graceful degradation under load.
 
 # Scalability and Reliability {#scalability}
 
-## Relay Network Architecture
-
 PACE inherits MOQT's relay architecture for geographic distribution
 and load management:
-
-~~~
-Hierarchical Relay Network:
-
-                   ┌─────────────────┐
-                   │  Global Relay   │
-                   │  (Federation)   │
-                   └────────┬────────┘
-                            │
-          ┌─────────────────┼─────────────────┐
-          │                 │                 │
-   ┌──────▼──────┐   ┌──────▼──────┐   ┌──────▼──────┐
-   │ Region A    │   │ Region B    │   │ Region C    │
-   │ Relay       │   │ Relay       │   │ Relay       │
-   └──────┬──────┘   └──────┬──────┘   └──────┬──────┘
-          │                 │                 │
-    ┌─────┴─────┐     ┌─────┴─────┐     ┌─────┴─────┐
-    │           │     │           │     │           │
-  Agent A    Agent B Agent C   Agent D Agent E   Agent F
-~~~
-{: #figure-relay-network title="Hierarchical Relay Network"}
-
-Properties of the relay network:
 
 * **Subscription Aggregation**: Multiple subscribers to the same track
   result in a single upstream subscription, reducing origin load
 * **Geographic Locality**: Edge relays cache content close to
   subscribers, minimizing round-trip latency
-* **Load Distribution**: Hierarchical structure prevents hotspots
-  and single points of failure
 * **Fault Isolation**: Relay failures are localized; other paths
   continue operating
-
-## Caching Strategy
-
-MOQT relays implement tiered caching optimized for agent communication:
-
-| Cache Tier | TTL | Content |
-|------------|-----|---------|
-| Hot | Seconds | Active operation responses, real-time state |
-| Warm | Minutes | Agent capability cards, session metadata |
-| Cold | Hours | Historical context, audit logs |
-
-Caching enables:
-
-* Late-joining participants receive current session state
-* Recovery from transient disconnections without peer retransmission
-* Reduced load on agent endpoints through relay-served responses
-* Efficient multipoint distribution of shared context
 
 ## Failure Modes and Recovery
 
@@ -1821,6 +1097,8 @@ Caching enables:
 | Relay failure | Subscription timeout | Failover to alternate relay |
 | Agent crash | Session heartbeat miss | Session suspended, await resume |
 | Prolonged outage | Session timeout | Session closed, state checkpointed |
+
+Session recovery mechanics are defined in {{session-recovery}}.
 
 # Security Considerations
 
@@ -1848,8 +1126,8 @@ PACE considers the following threats:
 
 ## Relay Trust Model
 
-MOQT relays are trusted for routing but NOT for content inspection.
-Relay operators:
+MOQT relays are trusted for routing but not content inspection. Relay
+operators:
 
 * MUST NOT inspect or modify message payloads
 * MUST enforce namespace-level access control
@@ -1857,8 +1135,8 @@ Relay operators:
 * MAY cache objects for operational efficiency
 * MUST NOT retain cached content beyond operational necessity
 
-For deployments requiring end-to-end confidentiality even from relay
-operators, agents MAY implement payload encryption above the PACE layer.
+For end-to-end confidentiality from relay operators, agents MAY
+implement payload encryption above the PACE layer.
 
 # IANA Considerations
 
@@ -1886,12 +1164,12 @@ Each entry contains:
 
 Initial entries:
 
-| Protocol ID | Version | Namespace Pattern | Reference |
+| Protocol ID | Version | Track Name Pattern | Reference |
 |-------------|---------|-------------------|-----------|
-| a2a | 0.3.0 | `pace/{s}/{a}/a2a/` | This document |
-| mcp | 2025-06-18 | `pace/{s}/{a}/mcp/` | This document |
-| autogen | 0.4 | `pace/{s}/{a}/autogen/` | This document |
-| (generic) | - | `pace/{s}/{a}/ext/{proto}/` | This document |
+| a2a | 0.3.0 | `a2a/{sub}/{id}` | This document |
+| mcp | 2025-06-18 | `mcp/{sub}/{id}` | This document |
+| autogen | 0.4 | `autogen/{sub}/{id}` | This document |
+| (generic) | - | `ext/{proto}/{sub}/{id}` | This document |
 
 ## PACE Message Type Registry
 
@@ -1911,6 +1189,165 @@ message types:
 | SESSION_LEAVE | 0x09 | Leave multi-party session |
 
 --- back
+
+# Transport Comparison {#transport-comparison}
+
+The following table compares MOQT (as used by PACE) with alternative
+transports for agent communication:
+
+| Feature | HTTP/JSON-RPC | gRPC | REST/SSE | MOQT (PACE) |
+|---------|---------------|------|----------|--------------|
+| Pub/Sub Native | No | Limited | No | Yes |
+| Multi-party Broadcast | Polling | N/A | Fan-out only | Native fan-out |
+| Relay/CDN Support | Separate infra | N/A | CDN possible | Built-in |
+| Priority QoS | Application layer | Per-stream | None | Per-object (0-255) |
+| Connection Migration | No | Limited | No | QUIC native |
+| Late Join | N/A | N/A | N/A | Group-based |
+| Streaming Granularity | Message-level | Stream | SSE events | Object/Group |
+| Discovery | Well-known URI | Service registry | Well-known URI | SUBSCRIBE_NAMESPACE |
+| Session Recovery | Re-establish | Reconnect | Reconnect | Relay cache + resume |
+| Multi-Modal Concurrent | Multiple conns | Multiple streams | Multiple conns | Single session |
+
+# Example Workflows {#example-workflows}
+
+This appendix illustrates common PACE workflows end-to-end, showing
+how agents use the namespace structure, session establishment, and
+protocol bindings defined in this document.
+
+## Agent-to-Agent: Task Delegation
+
+Agent A (a coordinator) delegates a research task to Agent B. This
+is a point-to-point session using the A2A binding.
+
+**Setup**: Agent A generates session-id `s1` (a UUID) and establishes
+a session with Agent B via the flow in {{session-management}}.
+
+**Resulting namespace layout**:
+
+~~~
+Agent A publishes:
+  ("pace","agents","agent-a","s1") -- "ctrl"            (SESSION_INIT)
+  ("pace","agents","agent-a","s1") -- "a2a/request/r1"  (task request)
+
+Agent B publishes:
+  ("pace","agents","agent-b","s1") -- "ctrl"            (SESSION_ACCEPT)
+  ("pace","agents","agent-b","s1") -- "a2a/response/r1" (task result)
+~~~
+
+**Flow**:
+
+1. A publishes SESSION_INIT on its `"ctrl"` track and sends an invite
+   to B's inbox
+2. B accepts, subscribes to A's session namespace, publishes
+   SESSION_ACCEPT on its own `"ctrl"` track
+3. A subscribes to B's session namespace
+4. A publishes a JSON-RPC request on `"a2a/request/r1"`:
+   `{"jsonrpc":"2.0","method":"message/send","params":{...},"id":"r1"}`
+5. B receives the request (via its subscription to A's namespace),
+   processes it, and publishes the result on `"a2a/response/r1"`
+6. A receives the response via its subscription to B's namespace
+7. Either agent publishes SESSION_CLOSE on `"ctrl"` to terminate
+
+## Agent-to-Tool: MCP Tool Invocation
+
+Agent A needs to read a file using a filesystem tool (an MCP server).
+
+**Setup**: Agent A generates session-id `s2` and establishes a session
+with the filesystem tool.
+
+**Resulting namespace layout**:
+
+~~~
+Agent A publishes:
+  ("pace","agents","agent-a","s2") -- "ctrl"
+  ("pace","agents","agent-a","s2") -- "mcp/tools/readFile"  (tool call)
+
+Tool publishes:
+  ("pace","agents","fs-tool","s2") -- "ctrl"
+  ("pace","agents","fs-tool","s2") -- "mcp/tools/readFile"  (tool result)
+~~~
+
+**Flow**:
+
+1. A establishes a session with the tool (SESSION_INIT / ACCEPT)
+2. A publishes a tool call on `"mcp/tools/readFile"`:
+   `{"jsonrpc":"2.0","method":"tools/call","params":{"name":"readFile",
+   "arguments":{"path":"/data/report.csv"}},"id":"t1"}`
+3. Tool receives the call, reads the file, publishes the result on its
+   own `"mcp/tools/readFile"` track
+4. A receives the file contents
+5. A may issue additional tool calls within the same session or close it
+
+## Multi-Agent Collaboration
+
+Agent A (coordinator) creates a research session and invites Agent B
+(web researcher) and Agent C (data analyst) to collaborate.
+
+**Setup**: Agent A generates session-id `s3`, invites B and C via their
+inbox tracks.
+
+**Resulting namespace layout**:
+
+~~~
+Agent A publishes:
+  ("pace","agents","agent-a","s3") -- "ctrl"     (session mgmt, assignments)
+  ("pace","agents","agent-a","s3") -- "chat"     (coordination messages)
+
+Agent B publishes:
+  ("pace","agents","agent-b","s3") -- "ctrl"     (SESSION_ACCEPT)
+  ("pace","agents","agent-b","s3") -- "chat"     (status updates)
+  ("pace","agents","agent-b","s3") -- "a2a/task/research-1"  (findings)
+
+Agent C publishes:
+  ("pace","agents","agent-c","s3") -- "ctrl"     (SESSION_ACCEPT)
+  ("pace","agents","agent-c","s3") -- "chat"     (status updates)
+  ("pace","agents","agent-c","s3") -- "a2a/task/analysis-1"  (results)
+~~~
+
+**Subscriptions**: Each agent subscribes to the other two agents'
+session namespaces:
+
+* A subscribes to `("pace","agents","agent-b","s3")` and
+  `("pace","agents","agent-c","s3")`
+* B subscribes to `("pace","agents","agent-a","s3")` and
+  `("pace","agents","agent-c","s3")`
+* C subscribes to `("pace","agents","agent-a","s3")` and
+  `("pace","agents","agent-b","s3")`
+
+**Flow**:
+
+1. A establishes session, B and C accept
+2. A publishes task assignments on `"chat"` — the relay fans out
+   to both B and C
+3. B performs web research, publishes findings incrementally on
+   `"a2a/task/research-1"` (using MOQT groups for phases)
+4. C subscribes to B's research track, receives findings as they
+   arrive, and begins analysis
+5. C publishes analysis results on `"a2a/task/analysis-1"`
+6. A monitors all progress through its subscriptions and publishes
+   a final summary when complete
+7. A publishes SESSION_CLOSE — all participants unsubscribe
+
+## Agent-to-Tool with Streaming: Long-Running Operation
+
+Agent A invokes a code-generation tool that produces output
+incrementally.
+
+**Setup**: Same as tool invocation — Agent A and the tool share
+session-id `s4`.
+
+**Flow**:
+
+1. A publishes a tool call on `"mcp/tools/generateCode"`
+2. Tool begins generating code and publishes results using MOQT groups:
+   - Group 0: `{"status":"started","language":"python"}`
+   - Group 1, Object 0: first code block
+   - Group 1, Object 1: second code block
+   - Group 2: `{"status":"complete","totalLines":142}`
+3. A receives objects as they are published (ascending group order)
+4. If A needs to cancel, it publishes a cancellation on `"ctrl"`
+5. Tool receives cancellation, stops generation, publishes final
+   status
 
 # Acknowledgments
 
