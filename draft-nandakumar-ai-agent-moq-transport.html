@@ -1646,62 +1646,51 @@ is not scoped to or owned by any single agent. Any agent can generate a
 session-id and invite others to collaborate under it. When multiple
 agents participate in a session, they each publish tracks under their
 own agent namespace using the same session-id.<a href="#section-3.2-2" class="pilcrow">¶</a></p>
-<p id="section-3.2-3">When an agent creates or joins a session, it <span class="bcp14">MUST</span> issue
-PUBLISH_NAMESPACE on its session namespace
-(<code>("pace","agents",{agent-id},{session-id})</code>) to enable the relay to
-route subscriptions to it. This is a separate PUBLISH_NAMESPACE from
-the agent-level one — MOQT requires an explicit PUBLISH_NAMESPACE for
-each namespace a publisher wants subscriptions routed to.<a href="#section-3.2-3" class="pilcrow">¶</a></p>
-<p id="section-3.2-4">To receive messages from a peer within a session, an agent issues
-SUBSCRIBE_NAMESPACE on that peer's session namespace
-(<code>("pace","agents",{peer-agent-id},{session-id})</code>). The relay matches
-this against the peer's PUBLISH_NAMESPACE and routes subscriptions
-accordingly.<a href="#section-3.2-4" class="pilcrow">¶</a></p>
-<p id="section-3.2-5">Each agent in a session publishes the following tracks:<a href="#section-3.2-5" class="pilcrow">¶</a></p>
+<p id="section-3.2-3">Each agent in a session publishes the following tracks:<a href="#section-3.2-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-3.2-4.1">
+            <p id="section-3.2-4.1.1"><code>"ctrl"</code> — Session lifecycle messages (SESSION_INIT, SESSION_ACCEPT,
+SESSION_UPDATE, SESSION_CLOSE)<a href="#section-3.2-4.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-3.2-4.2">
+            <p id="section-3.2-4.2.1"><code>"chat"</code> — Chat messages and streaming LLM output<a href="#section-3.2-4.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-3.2-4.3">
+            <p id="section-3.2-4.3.1"><code>"audio"</code> — Real-time audio stream<a href="#section-3.2-4.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-3.2-4.4">
+            <p id="section-3.2-4.4.1"><code>"video"</code> — Real-time video stream<a href="#section-3.2-4.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-3.2-4.5">
+            <p id="section-3.2-4.5.1"><code>"ops/{req-id}"</code> — Request/response operations (one track per request)<a href="#section-3.2-4.5.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-3.2-5">Protocol bindings add prefix-scoped tracks to enable multiple protocols
+to operate concurrently within a single session without track name
+collisions:<a href="#section-3.2-5" class="pilcrow">¶</a></p>
 <ul class="normal">
 <li class="normal" id="section-3.2-6.1">
-            <p id="section-3.2-6.1.1"><code>"ctrl"</code> — Session lifecycle messages (SESSION_INIT, SESSION_ACCEPT,
-SESSION_UPDATE, SESSION_CLOSE)<a href="#section-3.2-6.1.1" class="pilcrow">¶</a></p>
+            <p id="section-3.2-6.1.1"><code>"a2a/{category}/{id}"</code> — A2A protocol operations, where <code>{category}</code>
+is the operation type (e.g., <code>request</code>, <code>response</code>, <code>task</code>, <code>stream</code>)
+and <code>{id}</code> is the request or task identifier<a href="#section-3.2-6.1.1" class="pilcrow">¶</a></p>
 </li>
           <li class="normal" id="section-3.2-6.2">
-            <p id="section-3.2-6.2.1"><code>"chat"</code> — Chat messages and streaming LLM output<a href="#section-3.2-6.2.1" class="pilcrow">¶</a></p>
+            <p id="section-3.2-6.2.1"><code>"mcp/{category}/{id}"</code> — MCP protocol operations, where <code>{category}</code>
+is the primitive type (e.g., <code>tools</code>, <code>resources</code>, <code>prompts</code>) and
+<code>{id}</code> is the tool name or resource URI<a href="#section-3.2-6.2.1" class="pilcrow">¶</a></p>
 </li>
           <li class="normal" id="section-3.2-6.3">
-            <p id="section-3.2-6.3.1"><code>"audio"</code> — Real-time audio stream<a href="#section-3.2-6.3.1" class="pilcrow">¶</a></p>
-</li>
-          <li class="normal" id="section-3.2-6.4">
-            <p id="section-3.2-6.4.1"><code>"video"</code> — Real-time video stream<a href="#section-3.2-6.4.1" class="pilcrow">¶</a></p>
-</li>
-          <li class="normal" id="section-3.2-6.5">
-            <p id="section-3.2-6.5.1"><code>"ops/{req-id}"</code> — Request/response operations (one track per request)<a href="#section-3.2-6.5.1" class="pilcrow">¶</a></p>
+            <p id="section-3.2-6.3.1"><code>"ext/{proto}/{category}/{id}"</code> — Custom protocol extensions, where
+<code>{proto}</code> identifies the protocol<a href="#section-3.2-6.3.1" class="pilcrow">¶</a></p>
 </li>
         </ul>
-<p id="section-3.2-7">Protocol bindings add prefix-scoped tracks to enable multiple protocols
-to operate concurrently within a single session without track name
-collisions:<a href="#section-3.2-7" class="pilcrow">¶</a></p>
-<ul class="normal">
-<li class="normal" id="section-3.2-8.1">
-            <p id="section-3.2-8.1.1"><code>"a2a/{category}/{id}"</code> — A2A protocol operations, where <code>{category}</code>
-is the operation type (e.g., <code>request</code>, <code>response</code>, <code>task</code>, <code>stream</code>)
-and <code>{id}</code> is the request or task identifier<a href="#section-3.2-8.1.1" class="pilcrow">¶</a></p>
-</li>
-          <li class="normal" id="section-3.2-8.2">
-            <p id="section-3.2-8.2.1"><code>"mcp/{category}/{id}"</code> — MCP protocol operations, where <code>{category}</code>
-is the primitive type (e.g., <code>tools</code>, <code>resources</code>, <code>prompts</code>) and
-<code>{id}</code> is the tool name or resource URI<a href="#section-3.2-8.2.1" class="pilcrow">¶</a></p>
-</li>
-          <li class="normal" id="section-3.2-8.3">
-            <p id="section-3.2-8.3.1"><code>"ext/{proto}/{category}/{id}"</code> — Custom protocol extensions, where
-<code>{proto}</code> identifies the protocol<a href="#section-3.2-8.3.1" class="pilcrow">¶</a></p>
-</li>
-        </ul>
-<p id="section-3.2-9">For example, the MCP over MOQT specification <span>[<a href="#MCP-MOQT" class="cite xref">MCP-MOQT</a>]</span> defines
+<p id="section-3.2-7">For example, the MCP over MOQT specification <span>[<a href="#MCP-MOQT" class="cite xref">MCP-MOQT</a>]</span> defines
 tracks like <code>(mcp, {session-id}, tools) -- ({tool-name})</code>; within PACE,
 this maps to track name <code>"mcp/tools/{tool-name}"</code> under the agent's
 session namespace, preserving the MCP semantics while coexisting with
-A2A or other protocol tracks in the same session.<a href="#section-3.2-9" class="pilcrow">¶</a></p>
-<p id="section-3.2-10">See <a href="#example-workflows" class="auto internal xref">Appendix B</a> for concrete examples of agent-to-agent,
-agent-to-tool, and multi-agent collaboration workflows.<a href="#section-3.2-10" class="pilcrow">¶</a></p>
+A2A or other protocol tracks in the same session.<a href="#section-3.2-7" class="pilcrow">¶</a></p>
+<p id="section-3.2-8">See <a href="#example-workflows" class="auto internal xref">Appendix B</a> for concrete examples of agent-to-agent,
+agent-to-tool, and multi-agent collaboration workflows.<a href="#section-3.2-8" class="pilcrow">¶</a></p>
 </section>
 </div>
 <div id="session-discovery-namespace">

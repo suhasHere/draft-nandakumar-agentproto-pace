@@ -232,18 +232,6 @@ session-id and invite others to collaborate under it. When multiple
 agents participate in a session, they each publish tracks under their
 own agent namespace using the same session-id.
 
-When an agent creates or joins a session, it MUST issue
-PUBLISH_NAMESPACE on its session namespace
-(`("pace","agents",{agent-id},{session-id})`) to enable the relay to
-route subscriptions to it. This is a separate PUBLISH_NAMESPACE from
-the agent-level one — MOQT requires an explicit PUBLISH_NAMESPACE for
-each namespace a publisher wants subscriptions routed to.
-
-To receive messages from a peer within a session, an agent issues
-SUBSCRIBE_NAMESPACE on that peer's session namespace
-(`("pace","agents",{peer-agent-id},{session-id})`). The relay matches
-this against the peer's PUBLISH_NAMESPACE and routes subscriptions
-accordingly.
 
 Each agent in a session publishes the following tracks:
 
