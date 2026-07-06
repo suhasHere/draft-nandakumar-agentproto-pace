@@ -152,115 +152,195 @@ fan-out, and object caching. Relays <bcp14>MAY</bcp14> be organized hierarchical
 for geographic locality.</t>
       </section>
     </section>
-    <section anchor="namespace">
-      <name>Namespace Organization</name>
-      <t>PACE uses MOQT's hierarchical namespace for routing, isolation, and
+    <section anchor="moqt-mapping">
+      <name>MOQT Mapping</name>
+      <section anchor="namespace">
+        <name>Namespace Organization</name>
+        <t>PACE uses MOQT's hierarchical namespace for routing, isolation, and
 multiplexing. MOQT addresses content using a namespace tuple (an ordered
 sequence of string fields) combined with a track name. PACE organizes
 all communication into three namespace scopes defined in the following
 subsections.</t>
-      <section anchor="agent-namespace">
-        <name>Agent Namespace</name>
-        <artwork><![CDATA[
+        <section anchor="agent-namespace">
+          <name>Agent Namespace</name>
+          <artwork><![CDATA[
   ("pace", "agents", {agent-id}) -- {track}
 ]]></artwork>
-        <t>This is an agent's persistent identity on the relay network. Each agent
+          <t>This is an agent's persistent identity on the relay network. Each agent
 publishes the following tracks:</t>
-        <ul spacing="normal">
-          <li>
-            <t><tt>"card"</tt> — Agent Card containing capabilities, identity claims,
+          <ul spacing="normal">
+            <li>
+              <t><tt>"card"</tt> — Agent Card containing capabilities, identity claims,
 authentication schemes, and MOQT connectivity information</t>
-          </li>
-          <li>
-            <t><tt>"inbox"</tt> — Incoming session invitations from other agents; each
-object contains a session-id and the inviting agent's identifier</t>
-          </li>
-        </ul>
-        <t>The common prefix <tt>("pace", "agents")</tt> enables SUBSCRIBE_NAMESPACE-based
-discovery of all agents on the network. See <xref target="agent-discovery"/> for the
-complete discovery flow.</t>
-      </section>
-      <section anchor="session-communication-namespace">
-        <name>Session Communication Namespace</name>
-        <artwork><![CDATA[
+            </li>
+          </ul>
+          <t>The common prefix <tt>("pace", "agents")</tt> enables SUBSCRIBE_NAMESPACE-based
+discovery of all agents on the network. Interested agents then issue
+SUBSCRIBE_TRACKS on a discovered agent's prefix to receive all current
+and future tracks published by that agent. See <xref target="agent-discovery"/> for
+the complete discovery flow.</t>
+        </section>
+        <section anchor="session-communication-namespace">
+          <name>Session Communication Namespace</name>
+          <artwork><![CDATA[
   ("pace", "agents", {agent-id}, {session-id}) -- {track}
 ]]></artwork>
-        <t>A session-id is a shared UUID representing a collaboration context — it
+          <t>A session-id is a shared UUID representing a collaboration context — it
 is not scoped to or owned by any single agent. Any agent can generate a
-session-id and invite others to collaborate under it. When multiple
-agents participate in a session, they each publish tracks under their
-own agent namespace using the same session-id.</t>
-        <t>Each agent in a session publishes the following tracks:</t>
-        <ul spacing="normal">
-          <li>
-            <t><tt>"ctrl"</tt> — Session lifecycle messages (SESSION_INIT, SESSION_ACCEPT,
+session-id to initiate a collaboration. When multiple agents participate
+in a session, they each publish tracks under their own agent namespace
+using the same session-id. Agents that have issued SUBSCRIBE_TRACKS on
+a peer's agent prefix are automatically notified (via relay-forwarded
+PUBLISH messages) when that peer creates new session tracks.</t>
+          <t>Each agent in a session publishes the following tracks:</t>
+          <ul spacing="normal">
+            <li>
+              <t><tt>"ctrl"</tt> — Session lifecycle messages (SESSION_INIT, SESSION_ACCEPT,
 SESSION_UPDATE, SESSION_CLOSE)</t>
-          </li>
-          <li>
-            <t><tt>"chat"</tt> — Chat messages and streaming LLM output</t>
-          </li>
-          <li>
-            <t><tt>"audio"</tt> — Real-time audio stream</t>
-          </li>
-          <li>
-            <t><tt>"video"</tt> — Real-time video stream</t>
-          </li>
-          <li>
-            <t><tt>"ops/{req-id}"</tt> — Request/response operations (one track per request)</t>
-          </li>
-        </ul>
-        <t>Protocol bindings add prefix-scoped tracks to enable multiple protocols
+            </li>
+            <li>
+              <t><tt>"chat"</tt> — Chat messages and streaming LLM output</t>
+            </li>
+            <li>
+              <t><tt>"audio"</tt> — Real-time audio stream</t>
+            </li>
+            <li>
+              <t><tt>"video"</tt> — Real-time video stream</t>
+            </li>
+            <li>
+              <t><tt>"ops/{req-id}"</tt> — Request/response operations (one track per request)</t>
+            </li>
+          </ul>
+          <t>Protocol bindings add prefix-scoped tracks to enable multiple protocols
 to operate concurrently within a single session without track name
 collisions:</t>
-        <ul spacing="normal">
-          <li>
-            <t><tt>"a2a/{category}/{id}"</tt> — A2A protocol operations, where <tt>{category}</tt>
+          <ul spacing="normal">
+            <li>
+              <t><tt>"a2a/{category}/{id}"</tt> — A2A protocol operations, where <tt>{category}</tt>
 is the operation type (e.g., <tt>request</tt>, <tt>response</tt>, <tt>task</tt>, <tt>stream</tt>)
 and <tt>{id}</tt> is the request or task identifier</t>
-          </li>
-          <li>
-            <t><tt>"mcp/{category}/{id}"</tt> — MCP protocol operations, where <tt>{category}</tt>
+            </li>
+            <li>
+              <t><tt>"mcp/{category}/{id}"</tt> — MCP protocol operations, where <tt>{category}</tt>
 is the primitive type (e.g., <tt>tools</tt>, <tt>resources</tt>, <tt>prompts</tt>) and
 <tt>{id}</tt> is the tool name or resource URI</t>
-          </li>
-          <li>
-            <t><tt>"ext/{proto}/{category}/{id}"</tt> — Custom protocol extensions, where
+            </li>
+            <li>
+              <t><tt>"ext/{proto}/{category}/{id}"</tt> — Custom protocol extensions, where
 <tt>{proto}</tt> identifies the protocol</t>
-          </li>
-        </ul>
-        <t>For example, the MCP over MOQT specification <xref target="MCP-MOQT"/> defines
+            </li>
+          </ul>
+          <t>For example, the MCP over MOQT specification <xref target="MCP-MOQT"/> defines
 tracks like <tt>(mcp, {session-id}, tools) -- ({tool-name})</tt>; within PACE,
 this maps to track name <tt>"mcp/tools/{tool-name}"</tt> under the agent's
 session namespace, preserving the MCP semantics while coexisting with
 A2A or other protocol tracks in the same session.</t>
-        <t>See <xref target="example-workflows"/> for concrete examples of agent-to-agent,
+          <t>See <xref target="example-workflows"/> for concrete examples of agent-to-agent,
 agent-to-tool, and multi-agent collaboration workflows.</t>
-      </section>
-      <section anchor="session-discovery-namespace">
-        <name>Session Discovery Namespace</name>
-        <artwork><![CDATA[
+        </section>
+        <section anchor="session-discovery-namespace">
+          <name>Session Discovery Namespace</name>
+          <artwork><![CDATA[
   ("pace", "discovery", "sessions", {agent-id}) -- {session-id}
 ]]></artwork>
-        <t>Agents advertise their active sessions on this top-level discovery
+          <t>Agents advertise their active sessions on this top-level discovery
 namespace so that other agents can find sessions to join. Each agent
 publishes one track per active session (the track name is the
 session-id). Each object on a session track contains:</t>
-        <ul spacing="normal">
-          <li>
-            <t><tt>session-id</tt> — The shared session UUID</t>
-          </li>
-          <li>
-            <t><tt>description</tt> — Human-readable purpose of the session</t>
-          </li>
-          <li>
-            <t><tt>participants</tt> — List of agent-ids currently in the session</t>
-          </li>
-          <li>
-            <t><tt>modalities</tt> — Supported data modalities (text, audio, video, etc.)</t>
-          </li>
-        </ul>
-        <t>Agents discover active sessions by issuing SUBSCRIBE_NAMESPACE on
+          <ul spacing="normal">
+            <li>
+              <t><tt>session-id</tt> — The shared session UUID</t>
+            </li>
+            <li>
+              <t><tt>description</tt> — Human-readable purpose of the session</t>
+            </li>
+            <li>
+              <t><tt>participants</tt> — List of agent-ids currently in the session</t>
+            </li>
+            <li>
+              <t><tt>modalities</tt> — Supported data modalities (text, audio, video, etc.)</t>
+            </li>
+          </ul>
+          <t>Agents discover active sessions by issuing SUBSCRIBE_NAMESPACE on
 <tt>("pace", "discovery", "sessions")</tt>.</t>
+        </section>
+      </section>
+      <section anchor="transport-binding">
+        <name>Transport Binding</name>
+        <section anchor="connection-establishment">
+          <name>Connection Establishment</name>
+          <t>Agents <bcp14>MUST</bcp14> establish either a native QUIC connection or a WebTransport
+<xref target="RFC9297"/> session as defined in <xref target="MoQ-TRANSPORT"/>. For native QUIC
+connections, agents <bcp14>MUST</bcp14> use the ALPN value "moqt". For WebTransport,
+the protocol is negotiated using the "WT-Available-Protocols" mechanism
+as specified in <xref target="MoQ-TRANSPORT"/>.</t>
+          <t>Upon establishing the MOQT session (CLIENT_SETUP / SERVER_SETUP), an
+agent performs the bootstrap sequence to make itself discoverable:</t>
+          <ol spacing="normal" type="1"><li>
+              <t><strong>Announce</strong>: PUBLISH_NAMESPACE on <tt>("pace", "agents", {agent-id})</tt></t>
+            </li>
+            <li>
+              <t><strong>Publish Agent Card</strong>: PUBLISH on track <tt>"card"</tt> under its namespace</t>
+            </li>
+            <li>
+              <t><strong>Discover peers</strong>: SUBSCRIBE_NAMESPACE on <tt>("pace", "agents")</tt> to
+learn about other agents on the network</t>
+            </li>
+          </ol>
+          <t>See <xref target="agent-discovery"/> for the full discovery flow that follows
+bootstrap.</t>
+        </section>
+        <section anchor="track-organization">
+          <name>Track Organization</name>
+          <t>Each agent publishes exclusively on its own tracks. Other agents
+issue SUBSCRIBE_TRACKS on a peer's agent prefix to receive all tracks
+published by that peer, including session tracks. The relay handles
+fan-out to all subscribers via prefix matching. This per-agent
+publishing model ensures clear ownership and enables relay caching.</t>
+          <t>Namespace structure and track names are defined in <xref target="namespace"/>.</t>
+        </section>
+        <section anchor="message-serialization">
+          <name>Message Serialization</name>
+          <t>Protocol messages are encapsulated within MOQT objects using a PACE
+envelope prepended to the payload:</t>
+          <table>
+            <thead>
+              <tr>
+                <th align="left">Field</th>
+                <th align="left">Size</th>
+                <th align="left">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td align="left">
+                  <tt>version</tt></td>
+                <td align="left">1 byte</td>
+                <td align="left">PACE envelope version (currently 0x01)</td>
+              </tr>
+              <tr>
+                <td align="left">
+                  <tt>flags</tt></td>
+                <td align="left">1 byte</td>
+                <td align="left">0x01=compressed, 0x02=fragmented, 0x04=encrypted</td>
+              </tr>
+              <tr>
+                <td align="left">
+                  <tt>length</tt></td>
+                <td align="left">varint</td>
+                <td align="left">Length of the serialized protocol message</td>
+              </tr>
+              <tr>
+                <td align="left">payload</td>
+                <td align="left">variable</td>
+                <td align="left">Serialized protocol message</td>
+              </tr>
+            </tbody>
+          </table>
+          <t>Bindings <bcp14>SHOULD</bcp14> preserve native message formats. For example, A2A
+messages retain their JSON-RPC 2.0 format; the PACE envelope wraps
+the serialized JSON bytes.</t>
+        </section>
       </section>
     </section>
     <section anchor="session-management">
@@ -311,70 +391,54 @@ IDLE ──establish──▶ PENDING ──accept──▶ ACTIVE ◀──upda
       <section anchor="session-establishment">
         <name>Session Establishment</name>
         <t>Session establishment creates a shared communication context between
-two or more agents. Its goals are: (1) negotiate capabilities and
-modalities both agents support, (2) exchange identity tokens and verify
-authorization, and (3) set up the MOQT namespace subscriptions so that
-both agents can publish and receive messages within the session.</t>
-        <t>The mechanism relies on three MOQT operations. The initiator publishes
-a SESSION_INIT object on a new session control track under its own
-namespace, containing proposed session parameters. It then delivers a
-lightweight invite to the target agent's inbox track, notifying the
-target that a session is waiting. The target agent inspects the invite,
-subscribes to the initiator's session namespace to read the SESSION_INIT
-parameters, and — if it accepts — publishes a SESSION_ACCEPT on its own
-session control track. The initiator then subscribes to the target's
-session namespace, completing the bidirectional subscription setup.</t>
-        <t>Once both agents have subscribed to each other's session namespace, the
-session transitions to ACTIVE and data exchange can begin on any track
-within that session scope.</t>
-        <t>The following example illustrates the flow for Agent A initiating a
-session with Agent B (assumes A has already discovered B via
-<xref target="agent-discovery"/>):</t>
-        <figure anchor="_figure-session-establish">
-          <name>Session Establishment Example</name>
-          <artwork><![CDATA[
-Session Establishment Example:
-
-Agent A                          MOQT Relay                        Agent B
-  │                                  │                                │
-  │── PUBLISH SESSION_INIT ─────────▶│                                │
-  │   Track: ("pace","agents",       │                                │
-  │    "agent-a",{sid}) -- "ctrl"    │                                │
-  │   Object: {session params,       │                                │
-  │    capabilities, modalities}     │                                │
-  │                                  │                                │
-  │── PUBLISH invite ───────────────▶│── forward to B's inbox ───────▶│
-  │   Track: ("pace","agents",       │                                │
-  │    "agent-b") -- "inbox"         │                                │
-  │   Object: {session-id,           │                                │
-  │    from: agent-a}                │                                │
-  │                                  │                                │
-  │── PUBLISH session advertisement ▶│                                │
-  │   Track: ("pace","discovery",    │                                │
-  │    "sessions","agent-a")         │                                │
-  │    -- {sid}                      │                                │
-  │                                  │                                │
-  │                                  │   [B receives invite, reads    │
-  │                                  │    SESSION_INIT, decides to    │
-  │                                  │    accept]                     │
-  │                                  │                                │
-  │                                  │◀── SUBSCRIBE_NAMESPACE ────────│
-  │                                  │   ("pace","agents","agent-a",  │
-  │                                  │    {sid})                      │
-  │                                  │                                │
-  │                                  │◀── PUBLISH SESSION_ACCEPT ─────│
-  │◀── forward ─────────────────────│   Track: ("pace","agents",     │
-  │                                  │    "agent-b",{sid}) -- "ctrl"  │
-  │                                  │   Object: {capabilities,      │
-  │                                  │    accepted modalities}        │
-  │                                  │                                │
-  │── SUBSCRIBE_NAMESPACE ──────────▶│                                │
-  │   ("pace","agents","agent-b",    │                                │
-  │    {sid})                        │                                │
-  │                                  │                                │
-  │◀═══════════ PACE Session ACTIVE ═══════════════════════════════▶│
-]]></artwork>
-        </figure>
+two or more agents. Its goals are to negotiate capabilities and
+modalities, exchange and verify identity tokens, and set up the MOQT
+subscriptions so both agents can publish and receive messages.</t>
+        <t><strong>Prerequisite:</strong> Both agents must have completed discovery Phase 2
+(<xref target="agent-discovery"/>) — meaning they have issued SUBSCRIBE_TRACKS on
+each other's agent prefix. This enables the relay to forward PUBLISH
+messages between them automatically via prefix matching.</t>
+        <t>The following steps describe how Agent A (initiator) establishes a
+session with Agent B (responder):</t>
+        <ol spacing="normal" type="1"><li>
+            <t><strong>A generates a session-id</strong> (UUID).</t>
+          </li>
+          <li>
+            <t><strong>A publishes SESSION_INIT</strong> — A issues PUBLISH on
+<tt>("pace","agents","agent-a",{session-id}) -- "ctrl"</tt> containing
+proposed session parameters (target=agent-b, capabilities,
+modalities, identity token, supported protocols).</t>
+          </li>
+          <li>
+            <t><strong>Relay forwards PUBLISH to B</strong> — B's existing SUBSCRIBE_TRACKS on
+<tt>("pace","agents","agent-a")</tt> prefix-matches the new track. The
+relay forwards the PUBLISH message to B.</t>
+          </li>
+          <li>
+            <t><strong>B accepts the PUBLISH</strong> — this implicitly subscribes B to A's
+ctrl track. B receives the SESSION_INIT object, inspects the
+parameters, and decides whether to accept.</t>
+          </li>
+          <li>
+            <t><strong>B publishes SESSION_ACCEPT</strong> — B issues PUBLISH on
+<tt>("pace","agents","agent-b",{session-id}) -- "ctrl"</tt> containing
+accepted capabilities and modalities.</t>
+          </li>
+          <li>
+            <t><strong>Relay forwards PUBLISH to A</strong> — A's existing SUBSCRIBE_TRACKS on
+<tt>("pace","agents","agent-b")</tt> prefix-matches. The relay forwards
+the PUBLISH message to A.</t>
+          </li>
+          <li>
+            <t><strong>A accepts the PUBLISH</strong> — A receives the SESSION_ACCEPT object.</t>
+          </li>
+          <li>
+            <t><strong>Session is ACTIVE</strong> — both agents can now publish additional
+tracks under their respective session namespaces. The relay
+forwards all new PUBLISH messages to the peer via the existing
+SUBSCRIBE_TRACKS prefix match.</t>
+          </li>
+        </ol>
         <section anchor="session-parameters">
           <name>Session Parameters</name>
           <t>The SESSION_INIT object contains:</t>
@@ -476,9 +540,9 @@ missed messages without requiring peer retransmission.</t>
           <dt>Session Resumption:</dt>
           <dd>
             <t>Agents resume SUSPENDED sessions by reconnecting to the relay,
-re-issuing PUBLISH_NAMESPACE on their agent namespace, and
-re-subscribing to peer session namespaces. The relay delivers
-cached objects from the point of disconnection.</t>
+re-issuing PUBLISH_NAMESPACE and SUBSCRIBE_TRACKS on their agent
+prefix. The relay delivers cached objects from the point of
+disconnection.</t>
           </dd>
           <dt>State Checkpointing:</dt>
           <dd>
@@ -572,29 +636,55 @@ the complete chain to ensure each link has appropriate authorization.</t>
       </section>
       <section anchor="agent-discovery">
         <name>Agent Discovery</name>
-        <t>Agents discover each other using MOQT's PUBLISH_NAMESPACE and
-SUBSCRIBE_NAMESPACE operations before establishing any PACE session.
-Discovery operates on the Agent Namespace scope defined in <xref target="namespace"/>.
-Each agent is identified by a globally unique agent-id (UUID),
-verifiable via the Agent Card (see <xref target="agent-card"/>).</t>
-        <section anchor="part-1-discovering-agent-namespaces">
-          <name>Part 1: Discovering Agent Namespaces</name>
-          <t>Agents announce their presence by issuing PUBLISH_NAMESPACE on their
-namespace <tt>("pace","agents",{agent-id})</tt>. Other agents discover
-available peers by issuing SUBSCRIBE_NAMESPACE on the common prefix
-<tt>("pace","agents")</tt>. The relay forwards namespace announcements to
-matching subscribers, enabling Agent B to learn Agent A's namespace
-prefix without prior knowledge.</t>
+        <t>Agent discovery uses MOQT's namespace operations to find agents and
+follow their activity. Discovery operates on the Agent Namespace scope
+defined in <xref target="namespace"/>. Each agent is identified by a globally unique
+agent-id (UUID), verifiable via the Agent Card (see <xref target="agent-card"/>).</t>
+        <section anchor="phase-1-discovering-agents-on-the-network">
+          <name>Phase 1: Discovering Agents on the Network</name>
+          <ol spacing="normal" type="1"><li>
+              <t>Each agent announces its presence by issuing PUBLISH_NAMESPACE on
+<tt>("pace","agents",{agent-id})</tt>.</t>
+            </li>
+            <li>
+              <t>Agents discover peers by issuing SUBSCRIBE_NAMESPACE on the common
+prefix <tt>("pace","agents")</tt>.</t>
+            </li>
+            <li>
+              <t>The relay sends NAMESPACE messages to subscribers for each matching
+PUBLISH_NAMESPACE, enabling agents to learn about each other without
+prior knowledge.</t>
+            </li>
+          </ol>
           <t>If an agent-id is known out-of-band (e.g., from a registry or URL),
-agents <bcp14>MAY</bcp14> skip Part 1 and proceed directly to Part 2.</t>
+agents <bcp14>MAY</bcp14> skip Phase 1 and proceed directly to Phase 2.</t>
         </section>
-        <section anchor="part-2-fetching-agent-card-and-inbox">
-          <name>Part 2: Fetching Agent Card and Inbox</name>
-          <t>Once Agent B knows Agent A's namespace prefix, it issues
-SUBSCRIBE_NAMESPACE on <tt>("pace","agents",{agent-a})</tt> to discover A's
-tracks ("card", "inbox"). Agent B then subscribes to the "card" track
-to fetch A's Agent Card (capabilities, identity, authentication) and
-learns the "inbox" track where session invitations can be delivered.</t>
+        <section anchor="phase-2-following-an-agent">
+          <name>Phase 2: Following an Agent</name>
+          <t>Once Agent B knows Agent A's namespace prefix, B issues SUBSCRIBE_TRACKS
+on <tt>("pace","agents","agent-a")</tt>. This establishes an ongoing
+relationship where the relay forwards all PUBLISH messages from A that
+match this prefix — including A's Agent Card and any future session
+tracks A creates.</t>
+          <ol spacing="normal" type="1"><li>
+              <t>B issues SUBSCRIBE_TRACKS on <tt>("pace","agents","agent-a")</tt>.</t>
+            </li>
+            <li>
+              <t>The relay forwards A's PUBLISH for the <tt>"card"</tt> track to B.</t>
+            </li>
+            <li>
+              <t>B accepts the PUBLISH — this implicitly subscribes B to the card
+track and B receives A's Agent Card objects.</t>
+            </li>
+            <li>
+              <t>When A later publishes session tracks under
+<tt>("pace","agents","agent-a",{session-id})</tt>, the relay automatically
+forwards those PUBLISH messages to B (prefix match), enabling B to
+discover and join sessions without any explicit notification mechanism.</t>
+            </li>
+          </ol>
+          <t>A does the same for B by issuing SUBSCRIBE_TRACKS on
+<tt>("pace","agents","agent-b")</tt>.</t>
         </section>
         <section anchor="agent-card">
           <name>Agent Card</name>
@@ -620,14 +710,6 @@ the card's signature and expiration before acting on its claims.</t>
           <t>The card format is protocol-specific. For A2A agents, see
 <xref target="a2a-agent-card"/>. Agent Cards <bcp14>MAY</bcp14> use selective disclosure
 <xref target="SD-AGENT"/> to reveal only claims necessary for a given interaction.</t>
-        </section>
-        <section anchor="inbox-track">
-          <name>Inbox Track</name>
-          <t>Each agent subscribes to its own inbox track
-<tt>("pace","agents",{agent-id}) -- "inbox"</tt> upon connecting to the relay.
-Other agents publish session invitations to this track. Each inbox
-object contains a session-id and the initiator's agent-id. Late-joining
-agents receive cached inbox messages from the relay.</t>
         </section>
       </section>
     </section>
@@ -730,24 +812,6 @@ based on urgency and modality. PACE defines the following priority tiers:</t>
             </tr>
           </tbody>
         </table>
-        <section anchor="group-order">
-          <name>Group Order</name>
-          <t>MOQT Group Order controls delivery sequencing within a track:</t>
-          <ul spacing="normal">
-            <li>
-              <t>Real-time media: Descending order (newest first, drop stale frames)</t>
-            </li>
-            <li>
-              <t>Chat/streaming text: Ascending order (preserve message sequence)</t>
-            </li>
-            <li>
-              <t>Operations: Ascending order (preserve execution order)</t>
-            </li>
-            <li>
-              <t>Bulk transfers: Ascending order (sequential chunk delivery)</t>
-            </li>
-          </ul>
-        </section>
       </section>
       <section anchor="request-response">
         <name>Request/Response Pattern</name>
@@ -758,6 +822,8 @@ has subscribed to A's session namespace, receives the request, processes
 it, and publishes the response on its own corresponding track
 <tt>("pace","agents","agent-b",{sid}) -- "ops/{req-id}"</tt>. Agent A receives
 the response through its subscription to B's session namespace.</t>
+        <t>For a detailed example of request/response over MOQT tracks, see
+<xref target="MCP-MOQT"/> which defines this pattern for MCP tool invocations.</t>
       </section>
       <section anchor="streaming">
         <name>Streaming Pattern</name>
@@ -809,208 +875,6 @@ scope. Delegation chains (<xref target="identity-discovery"/>) maintain an
 auditable path from the original user authorization.</t>
         </dd>
       </dl>
-    </section>
-    <section anchor="authorization">
-      <name>Authorization and Security</name>
-      <section anchor="authorization-model">
-        <name>Authorization Model</name>
-        <t>PACE implements a behavior-driven authorization model where access
-tokens are scoped to specific operations an agent is permitted to
-perform.</t>
-        <section anchor="behavior-driven-scopes">
-          <name>Behavior-Driven Scopes</name>
-          <t>Scopes are structured as <tt>{domain}:{resource}:{action}:{constraints}</tt>,
-bound to specific agent behaviors rather than roles. Constraints
-support dynamic limits (time bounds, resource limits, counts).</t>
-        </section>
-        <section anchor="delegated-authorization">
-          <name>Delegated Authorization</name>
-          <t>When agents invoke other agents, each delegation narrows the scope.
-Agent A (holding scope S) requests a sub-scope S' ⊂ S for Agent B.
-Agent B can further narrow to S'' ⊂ S' for downstream tools.
-Downstream agents cannot exceed their delegator's permissions.</t>
-          <t>Authorization tokens are presented in SESSION_INIT and validated
-including the full delegation chain. Tokens are refreshed proactively
-before expiration.</t>
-        </section>
-        <section anchor="confirmation-and-evidence">
-          <name>Confirmation and Evidence</name>
-          <t>For high-risk operations, PACE supports confirmation requirements
-where agents must present cryptographic evidence of approval (human,
-policy-check, or MFA) before the operation proceeds.</t>
-        </section>
-      </section>
-      <section anchor="transport-security">
-        <name>Transport Security</name>
-        <t>All PACE communication is encrypted via TLS 1.3 (QUIC requirement).
-Agent identity tokens are cryptographically signed with short expiry.
-MOQT Common Access Tokens <xref target="MoQ-C4M"/> provide relay-level namespace
-authorization. Relay nodes cannot access payload content unless
-explicitly authorized as trusted intermediaries.</t>
-      </section>
-      <section anchor="privacy-considerations">
-        <name>Privacy Considerations</name>
-        <t>Agents <bcp14>SHOULD</bcp14> minimize shared data to what is necessary for the task.
-Long-lived sessions <bcp14>SHOULD</bcp14> support forward secrecy through periodic
-key rotation. Relay operators <bcp14>MUST NOT</bcp14> retain content beyond
-operational necessity.</t>
-      </section>
-    </section>
-    <section anchor="transport-binding">
-      <name>MOQT Transport Binding Layer</name>
-      <t>This section defines how PACE maps to MOQT primitives: connection
-setup, namespace operations, message serialization, and operation
-mappings. All namespace and track references follow the structure
-defined in <xref target="namespace"/>.</t>
-      <section anchor="connection-establishment">
-        <name>Connection Establishment</name>
-        <t>Agents <bcp14>MUST</bcp14> establish either a native QUIC connection or a WebTransport
-<xref target="RFC9297"/> session as defined in <xref target="MoQ-TRANSPORT"/>. For native QUIC
-connections, agents <bcp14>MUST</bcp14> use the ALPN value "moqt". For WebTransport,
-the protocol is negotiated using the "WT-Available-Protocols" mechanism
-as specified in <xref target="MoQ-TRANSPORT"/>.</t>
-        <t>Upon establishing the MOQT session (CLIENT_SETUP / SERVER_SETUP), an
-agent performs the bootstrap sequence to make itself discoverable and
-ready to receive session invitations. This sequence is:</t>
-        <ol spacing="normal" type="1"><li>
-            <t><strong>Announce</strong>: PUBLISH_NAMESPACE on <tt>("pace", "agents", {agent-id})</tt></t>
-          </li>
-          <li>
-            <t><strong>Publish Agent Card</strong>: Publish on track <tt>"card"</tt> under its namespace</t>
-          </li>
-          <li>
-            <t><strong>Subscribe to inbox</strong>: Subscribe to its own <tt>"inbox"</tt> track</t>
-          </li>
-        </ol>
-        <t>See <xref target="agent-discovery"/> for the full discovery flow that follows
-bootstrap.</t>
-      </section>
-      <section anchor="track-organization">
-        <name>Track Organization</name>
-        <t>Each agent publishes exclusively on its own tracks. Other agents
-subscribe to tracks they are interested in. The relay handles fan-out
-to all subscribers. This per-agent publishing model ensures clear
-ownership and enables relay caching.</t>
-        <t>Namespace structure and track names are defined in <xref target="namespace"/>.
-Participants discover each other's session tracks using
-SUBSCRIBE_NAMESPACE on <tt>("pace", "agents", {peer-agent-id}, {sid})</tt>.</t>
-      </section>
-      <section anchor="message-serialization">
-        <name>Message Serialization</name>
-        <t>Protocol messages are encapsulated within MOQT objects using a PACE
-envelope prepended to the payload:</t>
-        <table>
-          <thead>
-            <tr>
-              <th align="left">Field</th>
-              <th align="left">Size</th>
-              <th align="left">Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td align="left">
-                <tt>version</tt></td>
-              <td align="left">1 byte</td>
-              <td align="left">PACE envelope version (currently 0x01)</td>
-            </tr>
-            <tr>
-              <td align="left">
-                <tt>flags</tt></td>
-              <td align="left">1 byte</td>
-              <td align="left">0x01=compressed, 0x02=fragmented, 0x04=encrypted</td>
-            </tr>
-            <tr>
-              <td align="left">
-                <tt>length</tt></td>
-              <td align="left">varint</td>
-              <td align="left">Length of the serialized protocol message</td>
-            </tr>
-            <tr>
-              <td align="left">payload</td>
-              <td align="left">variable</td>
-              <td align="left">Serialized protocol message</td>
-            </tr>
-          </tbody>
-        </table>
-        <t>Bindings <bcp14>SHOULD</bcp14> preserve native message formats. For example, A2A
-messages retain their JSON-RPC 2.0 format; the PACE envelope wraps
-the serialized JSON bytes.</t>
-      </section>
-      <section anchor="operation-mapping">
-        <name>Operation-to-Primitive Mapping</name>
-        <t>Mapping of PACE operations to MOQT primitives:</t>
-        <table>
-          <thead>
-            <tr>
-              <th align="left">Operation</th>
-              <th align="left">MOQT Mechanism</th>
-              <th align="left">Namespace / Track</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td align="left">Agent discovery</td>
-              <td align="left">PUBLISH_NS + SUBSCRIBE_NS</td>
-              <td align="left">
-                <tt>("pace","agents")</tt> prefix</td>
-            </tr>
-            <tr>
-              <td align="left">Fetch Agent Card</td>
-              <td align="left">SUBSCRIBE + OBJECT</td>
-              <td align="left">
-                <tt>("pace","agents",{id}) -- "card"</tt></td>
-            </tr>
-            <tr>
-              <td align="left">Session discovery</td>
-              <td align="left">SUBSCRIBE_NS</td>
-              <td align="left">
-                <tt>("pace","discovery","sessions")</tt> prefix</td>
-            </tr>
-            <tr>
-              <td align="left">Session invite</td>
-              <td align="left">PUBLISH to inbox</td>
-              <td align="left">
-                <tt>("pace","agents",{id}) -- "inbox"</tt></td>
-            </tr>
-            <tr>
-              <td align="left">Join session</td>
-              <td align="left">SUBSCRIBE_NS on peer</td>
-              <td align="left">
-                <tt>("pace","agents",{peer},{sid})</tt></td>
-            </tr>
-            <tr>
-              <td align="left">One-shot request</td>
-              <td align="left">PUBLISH + OBJECT</td>
-              <td align="left">
-                <tt>("pace","agents",{id},{sid}) -- "ops/{req-id}"</tt></td>
-            </tr>
-            <tr>
-              <td align="left">Streaming</td>
-              <td align="left">PUBLISH + multiple OBJECTs</td>
-              <td align="left">
-                <tt>-- "a2a/stream/{id}"</tt> (groups)</td>
-            </tr>
-            <tr>
-              <td align="left">Cancellation</td>
-              <td align="left">OBJECT on ctrl</td>
-              <td align="left">
-                <tt>-- "ctrl"</tt></td>
-            </tr>
-            <tr>
-              <td align="left">Subscription</td>
-              <td align="left">SUBSCRIBE (ongoing)</td>
-              <td align="left">
-                <tt>-- "a2a/task/{id}"</tt></td>
-            </tr>
-            <tr>
-              <td align="left">Broadcast</td>
-              <td align="left">PUBLISH + relay fan-out</td>
-              <td align="left">Any track (relay fans out)</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
     </section>
     <section anchor="protocol-bindings">
       <name>Protocol Bindings</name>
@@ -1553,34 +1417,51 @@ Implementations <bcp14>SHOULD</bcp14> document extensions and <bcp14>MAY</bcp14>
 in the IANA PACE Protocol Binding Registry.</t>
         </section>
       </section>
-      <section anchor="orchestration">
-        <name>Multi-Agent Orchestration Patterns</name>
-        <t>Common coordination patterns built on PACE sessions and MOQT fan-out:</t>
-        <dl>
-          <dt>Sequential:</dt>
-          <dd>
-            <t>Each agent subscribes to its predecessor's response track and
-publishes to the next agent's request track, forming a pipeline.</t>
-          </dd>
-          <dt>Concurrent (Broadcast):</dt>
-          <dd>
-            <t>A coordinator publishes a single request; relay fan-out delivers
-it to all subscribing specialists. Results are published back to
-tracks the coordinator subscribes to.</t>
-          </dd>
-          <dt>Handoff:</dt>
-          <dd>
-            <t>Agent A publishes a HANDOFF message on the control track. Agent B
-subscribes to the task track, receives cached context from the
-relay, and continues execution without explicit state transfer.</t>
-          </dd>
-          <dt>Hierarchical:</dt>
-          <dd>
-            <t>Coordinators create child PACE sessions for sub-task delegation.
-Delegation chains ensure authorization propagates through the
-hierarchy (see <xref target="topologies"/>).</t>
-          </dd>
-        </dl>
+    </section>
+    <section anchor="authorization">
+      <name>Authorization and Security</name>
+      <section anchor="authorization-model">
+        <name>Authorization Model</name>
+        <t>PACE implements a behavior-driven authorization model where access
+tokens are scoped to specific operations an agent is permitted to
+perform.</t>
+        <section anchor="behavior-driven-scopes">
+          <name>Behavior-Driven Scopes</name>
+          <t>Scopes are structured as <tt>{domain}:{resource}:{action}:{constraints}</tt>,
+bound to specific agent behaviors rather than roles. Constraints
+support dynamic limits (time bounds, resource limits, counts).</t>
+        </section>
+        <section anchor="delegated-authorization">
+          <name>Delegated Authorization</name>
+          <t>When agents invoke other agents, each delegation narrows the scope.
+Agent A (holding scope S) requests a sub-scope S' ⊂ S for Agent B.
+Agent B can further narrow to S'' ⊂ S' for downstream tools.
+Downstream agents cannot exceed their delegator's permissions.</t>
+          <t>Authorization tokens are presented in SESSION_INIT and validated
+including the full delegation chain. Tokens are refreshed proactively
+before expiration.</t>
+        </section>
+        <section anchor="confirmation-and-evidence">
+          <name>Confirmation and Evidence</name>
+          <t>For high-risk operations, PACE supports confirmation requirements
+where agents must present cryptographic evidence of approval (human,
+policy-check, or MFA) before the operation proceeds.</t>
+        </section>
+      </section>
+      <section anchor="transport-security">
+        <name>Transport Security</name>
+        <t>All PACE communication is encrypted via TLS 1.3 (QUIC requirement).
+Agent identity tokens are cryptographically signed with short expiry.
+MOQT Common Access Tokens <xref target="MoQ-C4M"/> provide relay-level namespace
+authorization. Relay nodes cannot access payload content unless
+explicitly authorized as trusted intermediaries.</t>
+      </section>
+      <section anchor="privacy-considerations">
+        <name>Privacy Considerations</name>
+        <t>Agents <bcp14>SHOULD</bcp14> minimize shared data to what is necessary for the task.
+Long-lived sessions <bcp14>SHOULD</bcp14> support forward secrecy through periodic
+key rotation. Relay operators <bcp14>MUST NOT</bcp14> retain content beyond
+operational necessity.</t>
       </section>
     </section>
     <section anchor="scalability">
@@ -1639,81 +1520,7 @@ continue operating</t>
     </section>
     <section anchor="security-considerations">
       <name>Security Considerations</name>
-      <section anchor="threat-model">
-        <name>Threat Model</name>
-        <t>PACE considers the following threats:</t>
-        <ul spacing="normal">
-          <li>
-            <t>Unauthorized agents joining sessions or impersonating legitimate agents</t>
-          </li>
-          <li>
-            <t>Man-in-the-middle attacks on agent communications</t>
-          </li>
-          <li>
-            <t>Privilege escalation through delegation chain manipulation</t>
-          </li>
-          <li>
-            <t>Denial of service via excessive session creation or message flooding</t>
-          </li>
-          <li>
-            <t>Data exfiltration through compromised relay nodes</t>
-          </li>
-          <li>
-            <t>Hallucination-driven operations by compromised or malfunctioning agents</t>
-          </li>
-        </ul>
-      </section>
-      <section anchor="mitigations">
-        <name>Mitigations</name>
-        <ul spacing="normal">
-          <li>
-            <t>All transport is encrypted via TLS 1.3 (QUIC requirement)</t>
-          </li>
-          <li>
-            <t>Agent identity tokens are cryptographically signed with short expiry</t>
-          </li>
-          <li>
-            <t>Delegation chains are validated end-to-end at each hop</t>
-          </li>
-          <li>
-            <t>Relay authorization via MOQT Common Access Tokens restricts namespace access</t>
-          </li>
-          <li>
-            <t>Rate limiting at relay nodes prevents flooding</t>
-          </li>
-          <li>
-            <t>Confirmation requirements for high-risk operations prevent
-hallucination-driven damage</t>
-          </li>
-          <li>
-            <t>Session timeout and explicit termination prevent resource exhaustion</t>
-          </li>
-        </ul>
-      </section>
-      <section anchor="relay-trust-model">
-        <name>Relay Trust Model</name>
-        <t>MOQT relays are trusted for routing but not content inspection. Relay
-operators:</t>
-        <ul spacing="normal">
-          <li>
-            <t><bcp14>MUST NOT</bcp14> inspect or modify message payloads</t>
-          </li>
-          <li>
-            <t><bcp14>MUST</bcp14> enforce namespace-level access control</t>
-          </li>
-          <li>
-            <t><bcp14>MUST</bcp14> implement rate limiting and abuse prevention</t>
-          </li>
-          <li>
-            <t><bcp14>MAY</bcp14> cache objects for operational efficiency</t>
-          </li>
-          <li>
-            <t><bcp14>MUST NOT</bcp14> retain cached content beyond operational necessity</t>
-          </li>
-        </ul>
-        <t>For end-to-end confidentiality from relay operators, agents <bcp14>MAY</bcp14>
-implement payload encryption above the PACE layer.</t>
-      </section>
+      <t>TODO</t>
     </section>
     <section anchor="iana-considerations">
       <name>IANA Considerations</name>
@@ -2131,97 +1938,9 @@ message types:</t>
         </reference>
       </references>
     </references>
-    <?line 1197?>
+    <?line 1092?>
 
-<section anchor="transport-comparison">
-      <name>Transport Comparison</name>
-      <t>The following table compares MOQT (as used by PACE) with alternative
-transports for agent communication:</t>
-      <table>
-        <thead>
-          <tr>
-            <th align="left">Feature</th>
-            <th align="left">HTTP/JSON-RPC</th>
-            <th align="left">gRPC</th>
-            <th align="left">REST/SSE</th>
-            <th align="left">MOQT (PACE)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td align="left">Pub/Sub Native</td>
-            <td align="left">No</td>
-            <td align="left">Limited</td>
-            <td align="left">No</td>
-            <td align="left">Yes</td>
-          </tr>
-          <tr>
-            <td align="left">Multi-party Broadcast</td>
-            <td align="left">Polling</td>
-            <td align="left">N/A</td>
-            <td align="left">Fan-out only</td>
-            <td align="left">Native fan-out</td>
-          </tr>
-          <tr>
-            <td align="left">Relay/CDN Support</td>
-            <td align="left">Separate infra</td>
-            <td align="left">N/A</td>
-            <td align="left">CDN possible</td>
-            <td align="left">Built-in</td>
-          </tr>
-          <tr>
-            <td align="left">Priority QoS</td>
-            <td align="left">Application layer</td>
-            <td align="left">Per-stream</td>
-            <td align="left">None</td>
-            <td align="left">Per-object (0-255)</td>
-          </tr>
-          <tr>
-            <td align="left">Connection Migration</td>
-            <td align="left">No</td>
-            <td align="left">Limited</td>
-            <td align="left">No</td>
-            <td align="left">QUIC native</td>
-          </tr>
-          <tr>
-            <td align="left">Late Join</td>
-            <td align="left">N/A</td>
-            <td align="left">N/A</td>
-            <td align="left">N/A</td>
-            <td align="left">Group-based</td>
-          </tr>
-          <tr>
-            <td align="left">Streaming Granularity</td>
-            <td align="left">Message-level</td>
-            <td align="left">Stream</td>
-            <td align="left">SSE events</td>
-            <td align="left">Object/Group</td>
-          </tr>
-          <tr>
-            <td align="left">Discovery</td>
-            <td align="left">Well-known URI</td>
-            <td align="left">Service registry</td>
-            <td align="left">Well-known URI</td>
-            <td align="left">SUBSCRIBE_NAMESPACE</td>
-          </tr>
-          <tr>
-            <td align="left">Session Recovery</td>
-            <td align="left">Re-establish</td>
-            <td align="left">Reconnect</td>
-            <td align="left">Reconnect</td>
-            <td align="left">Relay cache + resume</td>
-          </tr>
-          <tr>
-            <td align="left">Multi-Modal Concurrent</td>
-            <td align="left">Multiple conns</td>
-            <td align="left">Multiple streams</td>
-            <td align="left">Multiple conns</td>
-            <td align="left">Single session</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-    <section anchor="example-workflows">
+<section anchor="example-workflows">
       <name>Example Workflows</name>
       <t>This appendix illustrates common PACE workflows end-to-end, showing
 how agents use the namespace structure, session establishment, and
@@ -2244,15 +1963,15 @@ Agent B publishes:
 ]]></artwork>
         <t><strong>Flow</strong>:</t>
         <ol spacing="normal" type="1"><li>
-            <t>A publishes SESSION_INIT on its <tt>"ctrl"</tt> track and sends an invite
-to B's inbox</t>
+            <t>A publishes SESSION_INIT on its <tt>"ctrl"</tt> track — the relay forwards
+to B via B's SUBSCRIBE_TRACKS prefix match</t>
           </li>
           <li>
-            <t>B accepts, subscribes to A's session namespace, publishes
-SESSION_ACCEPT on its own <tt>"ctrl"</tt> track</t>
+            <t>B accepts the forwarded PUBLISH, publishes SESSION_ACCEPT on its
+own <tt>"ctrl"</tt> track</t>
           </li>
           <li>
-            <t>A subscribes to B's session namespace</t>
+            <t>A receives SESSION_ACCEPT via the relay (A's SUBSCRIBE_TRACKS on B)</t>
           </li>
           <li>
             <t>A publishes a JSON-RPC request on <tt>"a2a/request/r1"</tt>:
@@ -2310,8 +2029,9 @@ own <tt>"mcp/tools/readFile"</tt> track</t>
         <name>Multi-Agent Collaboration</name>
         <t>Agent A (coordinator) creates a research session and invites Agent B
 (web researcher) and Agent C (data analyst) to collaborate.</t>
-        <t><strong>Setup</strong>: Agent A generates session-id <tt>s3</tt>, invites B and C via their
-inbox tracks.</t>
+        <t><strong>Setup</strong>: Agent A generates session-id <tt>s3</tt> and publishes SESSION_INIT
+on its ctrl track — the relay forwards to B and C via their
+SUBSCRIBE_TRACKS prefix match on A's agent namespace.</t>
         <t><strong>Resulting namespace layout</strong>:</t>
         <artwork><![CDATA[
 Agent A publishes:
@@ -2419,368 +2139,332 @@ status</t>
     </section>
   </back>
   <!-- ##markdown-source:
-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
+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
 
 -->
 

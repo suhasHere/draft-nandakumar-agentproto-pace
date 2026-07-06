@@ -194,7 +194,9 @@ Agents connect to MOQT relays which handle subscription matching,
 fan-out, and object caching. Relays MAY be organized hierarchically
 for geographic locality.
 
-# Namespace Organization {#namespace}
+# MOQT Mapping {#moqt-mapping}
+
+## Namespace Organization {#namespace}
 
 PACE uses MOQT's hierarchical namespace for routing, isolation, and
 multiplexing. MOQT addresses content using a namespace tuple (an ordered
@@ -202,7 +204,7 @@ sequence of string fields) combined with a track name. PACE organizes
 all communication into three namespace scopes defined in the following
 subsections.
 
-## Agent Namespace
+### Agent Namespace
 
 ~~~
   ("pace", "agents", {agent-id}) -- {track}
@@ -213,14 +215,14 @@ publishes the following tracks:
 
 * `"card"` — Agent Card containing capabilities, identity claims,
   authentication schemes, and MOQT connectivity information
-* `"inbox"` — Incoming session invitations from other agents; each
-  object contains a session-id and the inviting agent's identifier
 
 The common prefix `("pace", "agents")` enables SUBSCRIBE_NAMESPACE-based
-discovery of all agents on the network. See {{agent-discovery}} for the
-complete discovery flow.
+discovery of all agents on the network. Interested agents then issue
+SUBSCRIBE_TRACKS on a discovered agent's prefix to receive all current
+and future tracks published by that agent. See {{agent-discovery}} for
+the complete discovery flow.
 
-## Session Communication Namespace
+### Session Communication Namespace
 
 ~~~
   ("pace", "agents", {agent-id}, {session-id}) -- {track}
@@ -228,9 +230,11 @@ complete discovery flow.
 
 A session-id is a shared UUID representing a collaboration context — it
 is not scoped to or owned by any single agent. Any agent can generate a
-session-id and invite others to collaborate under it. When multiple
-agents participate in a session, they each publish tracks under their
-own agent namespace using the same session-id.
+session-id to initiate a collaboration. When multiple agents participate
+in a session, they each publish tracks under their own agent namespace
+using the same session-id. Agents that have issued SUBSCRIBE_TRACKS on
+a peer's agent prefix are automatically notified (via relay-forwarded
+PUBLISH messages) when that peer creates new session tracks.
 
 
 Each agent in a session publishes the following tracks:
@@ -264,7 +268,7 @@ A2A or other protocol tracks in the same session.
 See {{example-workflows}} for concrete examples of agent-to-agent,
 agent-to-tool, and multi-agent collaboration workflows.
 
-## Session Discovery Namespace
+### Session Discovery Namespace
 
 ~~~
   ("pace", "discovery", "sessions", {agent-id}) -- {session-id}
@@ -283,6 +287,52 @@ session-id). Each object on a session track contains:
 Agents discover active sessions by issuing SUBSCRIBE_NAMESPACE on
 `("pace", "discovery", "sessions")`.
 
+## Transport Binding {#transport-binding}
+
+### Connection Establishment {#connection-establishment}
+
+Agents MUST establish either a native QUIC connection or a WebTransport
+{{RFC9297}} session as defined in {{MoQ-TRANSPORT}}. For native QUIC
+connections, agents MUST use the ALPN value "moqt". For WebTransport,
+the protocol is negotiated using the "WT-Available-Protocols" mechanism
+as specified in {{MoQ-TRANSPORT}}.
+
+Upon establishing the MOQT session (CLIENT_SETUP / SERVER_SETUP), an
+agent performs the bootstrap sequence to make itself discoverable:
+
+1. **Announce**: PUBLISH_NAMESPACE on `("pace", "agents", {agent-id})`
+2. **Publish Agent Card**: PUBLISH on track `"card"` under its namespace
+3. **Discover peers**: SUBSCRIBE_NAMESPACE on `("pace", "agents")` to
+   learn about other agents on the network
+
+See {{agent-discovery}} for the full discovery flow that follows
+bootstrap.
+
+### Track Organization {#track-organization}
+
+Each agent publishes exclusively on its own tracks. Other agents
+issue SUBSCRIBE_TRACKS on a peer's agent prefix to receive all tracks
+published by that peer, including session tracks. The relay handles
+fan-out to all subscribers via prefix matching. This per-agent
+publishing model ensures clear ownership and enables relay caching.
+
+Namespace structure and track names are defined in {{namespace}}.
+
+### Message Serialization {#message-serialization}
+
+Protocol messages are encapsulated within MOQT objects using a PACE
+envelope prepended to the payload:
+
+| Field | Size | Description |
+|-------|------|-------------|
+| `version` | 1 byte | PACE envelope version (currently 0x01) |
+| `flags` | 1 byte | 0x01=compressed, 0x02=fragmented, 0x04=encrypted |
+| `length` | varint | Length of the serialized protocol message |
+| payload | variable | Serialized protocol message |
+
+Bindings SHOULD preserve native message formats. For example, A2A
+messages retain their JSON-RPC 2.0 format; the PACE envelope wraps
+the serialized JSON bytes.
 
 # Session Management {#session-management}
 
@@ -325,72 +375,47 @@ CLOSED:
 ## Session Establishment
 
 Session establishment creates a shared communication context between
-two or more agents. Its goals are: (1) negotiate capabilities and
-modalities both agents support, (2) exchange identity tokens and verify
-authorization, and (3) set up the MOQT namespace subscriptions so that
-both agents can publish and receive messages within the session.
+two or more agents. Its goals are to negotiate capabilities and
+modalities, exchange and verify identity tokens, and set up the MOQT
+subscriptions so both agents can publish and receive messages.
 
-The mechanism relies on three MOQT operations. The initiator publishes
-a SESSION_INIT object on a new session control track under its own
-namespace, containing proposed session parameters. It then delivers a
-lightweight invite to the target agent's inbox track, notifying the
-target that a session is waiting. The target agent inspects the invite,
-subscribes to the initiator's session namespace to read the SESSION_INIT
-parameters, and — if it accepts — publishes a SESSION_ACCEPT on its own
-session control track. The initiator then subscribes to the target's
-session namespace, completing the bidirectional subscription setup.
+**Prerequisite:** Both agents must have completed discovery Phase 2
+({{agent-discovery}}) — meaning they have issued SUBSCRIBE_TRACKS on
+each other's agent prefix. This enables the relay to forward PUBLISH
+messages between them automatically via prefix matching.
 
-Once both agents have subscribed to each other's session namespace, the
-session transitions to ACTIVE and data exchange can begin on any track
-within that session scope.
+The following steps describe how Agent A (initiator) establishes a
+session with Agent B (responder):
 
-The following example illustrates the flow for Agent A initiating a
-session with Agent B (assumes A has already discovered B via
-{{agent-discovery}}):
+1. **A generates a session-id** (UUID).
 
-~~~
-Session Establishment Example:
+2. **A publishes SESSION_INIT** — A issues PUBLISH on
+   `("pace","agents","agent-a",{session-id}) -- "ctrl"` containing
+   proposed session parameters (target=agent-b, capabilities,
+   modalities, identity token, supported protocols).
 
-Agent A                          MOQT Relay                        Agent B
-  │                                  │                                │
-  │── PUBLISH SESSION_INIT ─────────▶│                                │
-  │   Track: ("pace","agents",       │                                │
-  │    "agent-a",{sid}) -- "ctrl"    │                                │
-  │   Object: {session params,       │                                │
-  │    capabilities, modalities}     │                                │
-  │                                  │                                │
-  │── PUBLISH invite ───────────────▶│── forward to B's inbox ───────▶│
-  │   Track: ("pace","agents",       │                                │
-  │    "agent-b") -- "inbox"         │                                │
-  │   Object: {session-id,           │                                │
-  │    from: agent-a}                │                                │
-  │                                  │                                │
-  │── PUBLISH session advertisement ▶│                                │
-  │   Track: ("pace","discovery",    │                                │
-  │    "sessions","agent-a")         │                                │
-  │    -- {sid}                      │                                │
-  │                                  │                                │
-  │                                  │   [B receives invite, reads    │
-  │                                  │    SESSION_INIT, decides to    │
-  │                                  │    accept]                     │
-  │                                  │                                │
-  │                                  │◀── SUBSCRIBE_NAMESPACE ────────│
-  │                                  │   ("pace","agents","agent-a",  │
-  │                                  │    {sid})                      │
-  │                                  │                                │
-  │                                  │◀── PUBLISH SESSION_ACCEPT ─────│
-  │◀── forward ─────────────────────│   Track: ("pace","agents",     │
-  │                                  │    "agent-b",{sid}) -- "ctrl"  │
-  │                                  │   Object: {capabilities,      │
-  │                                  │    accepted modalities}        │
-  │                                  │                                │
-  │── SUBSCRIBE_NAMESPACE ──────────▶│                                │
-  │   ("pace","agents","agent-b",    │                                │
-  │    {sid})                        │                                │
-  │                                  │                                │
-  │◀═══════════ PACE Session ACTIVE ═══════════════════════════════▶│
-~~~
-{: #figure-session-establish title="Session Establishment Example"}
+3. **Relay forwards PUBLISH to B** — B's existing SUBSCRIBE_TRACKS on
+   `("pace","agents","agent-a")` prefix-matches the new track. The
+   relay forwards the PUBLISH message to B.
+
+4. **B accepts the PUBLISH** — this implicitly subscribes B to A's
+   ctrl track. B receives the SESSION_INIT object, inspects the
+   parameters, and decides whether to accept.
+
+5. **B publishes SESSION_ACCEPT** — B issues PUBLISH on
+   `("pace","agents","agent-b",{session-id}) -- "ctrl"` containing
+   accepted capabilities and modalities.
+
+6. **Relay forwards PUBLISH to A** — A's existing SUBSCRIBE_TRACKS on
+   `("pace","agents","agent-b")` prefix-matches. The relay forwards
+   the PUBLISH message to A.
+
+7. **A accepts the PUBLISH** — A receives the SESSION_ACCEPT object.
+
+8. **Session is ACTIVE** — both agents can now publish additional
+   tracks under their respective session namespaces. The relay
+   forwards all new PUBLISH messages to the peer via the existing
+   SUBSCRIBE_TRACKS prefix match.
 
 ### Session Parameters
 
@@ -446,9 +471,9 @@ Relay Caching:
 
 Session Resumption:
 : Agents resume SUSPENDED sessions by reconnecting to the relay,
-  re-issuing PUBLISH_NAMESPACE on their agent namespace, and
-  re-subscribing to peer session namespaces. The relay delivers
-  cached objects from the point of disconnection.
+  re-issuing PUBLISH_NAMESPACE and SUBSCRIBE_TRACKS on their agent
+  prefix. The relay delivers cached objects from the point of
+  disconnection.
 
 State Checkpointing:
 : Agents SHOULD periodically publish state checkpoints on a dedicated
@@ -500,31 +525,43 @@ the complete chain to ensure each link has appropriate authorization.
 
 ## Agent Discovery {#agent-discovery}
 
-Agents discover each other using MOQT's PUBLISH_NAMESPACE and
-SUBSCRIBE_NAMESPACE operations before establishing any PACE session.
-Discovery operates on the Agent Namespace scope defined in {{namespace}}.
-Each agent is identified by a globally unique agent-id (UUID),
-verifiable via the Agent Card (see {{agent-card}}).
+Agent discovery uses MOQT's namespace operations to find agents and
+follow their activity. Discovery operates on the Agent Namespace scope
+defined in {{namespace}}. Each agent is identified by a globally unique
+agent-id (UUID), verifiable via the Agent Card (see {{agent-card}}).
 
-### Part 1: Discovering Agent Namespaces
+### Phase 1: Discovering Agents on the Network
 
-Agents announce their presence by issuing PUBLISH_NAMESPACE on their
-namespace `("pace","agents",{agent-id})`. Other agents discover
-available peers by issuing SUBSCRIBE_NAMESPACE on the common prefix
-`("pace","agents")`. The relay forwards namespace announcements to
-matching subscribers, enabling Agent B to learn Agent A's namespace
-prefix without prior knowledge.
+1. Each agent announces its presence by issuing PUBLISH_NAMESPACE on
+   `("pace","agents",{agent-id})`.
+2. Agents discover peers by issuing SUBSCRIBE_NAMESPACE on the common
+   prefix `("pace","agents")`.
+3. The relay sends NAMESPACE messages to subscribers for each matching
+   PUBLISH_NAMESPACE, enabling agents to learn about each other without
+   prior knowledge.
 
 If an agent-id is known out-of-band (e.g., from a registry or URL),
-agents MAY skip Part 1 and proceed directly to Part 2.
+agents MAY skip Phase 1 and proceed directly to Phase 2.
 
-### Part 2: Fetching Agent Card and Inbox
+### Phase 2: Following an Agent
 
-Once Agent B knows Agent A's namespace prefix, it issues
-SUBSCRIBE_NAMESPACE on `("pace","agents",{agent-a})` to discover A's
-tracks ("card", "inbox"). Agent B then subscribes to the "card" track
-to fetch A's Agent Card (capabilities, identity, authentication) and
-learns the "inbox" track where session invitations can be delivered.
+Once Agent B knows Agent A's namespace prefix, B issues SUBSCRIBE_TRACKS
+on `("pace","agents","agent-a")`. This establishes an ongoing
+relationship where the relay forwards all PUBLISH messages from A that
+match this prefix — including A's Agent Card and any future session
+tracks A creates.
+
+1. B issues SUBSCRIBE_TRACKS on `("pace","agents","agent-a")`.
+2. The relay forwards A's PUBLISH for the `"card"` track to B.
+3. B accepts the PUBLISH — this implicitly subscribes B to the card
+   track and B receives A's Agent Card objects.
+4. When A later publishes session tracks under
+   `("pace","agents","agent-a",{session-id})`, the relay automatically
+   forwards those PUBLISH messages to B (prefix match), enabling B to
+   discover and join sessions without any explicit notification mechanism.
+
+A does the same for B by issuing SUBSCRIBE_TRACKS on
+`("pace","agents","agent-b")`.
 
 ### Agent Card {#agent-card}
 
@@ -543,14 +580,6 @@ All Agent Cards MUST include:
 The card format is protocol-specific. For A2A agents, see
 {{a2a-agent-card}}. Agent Cards MAY use selective disclosure
 {{SD-AGENT}} to reveal only claims necessary for a given interaction.
-
-### Inbox Track {#inbox-track}
-
-Each agent subscribes to its own inbox track
-`("pace","agents",{agent-id}) -- "inbox"` upon connecting to the relay.
-Other agents publish session invitations to this track. Each inbox
-object contains a session-id and the initiator's agent-id. Late-joining
-agents receive cached inbox messages from the relay.
 
 # Multi-Modal Data Exchange {#data-exchange}
 
@@ -589,15 +618,6 @@ based on urgency and modality. PACE defines the following priority tiers:
 | 160-191 | Background | Telemetry, non-critical notifications |
 | 192-255 | Bulk Transfer | File transfers, context exchange |
 
-### Group Order
-
-MOQT Group Order controls delivery sequencing within a track:
-
-* Real-time media: Descending order (newest first, drop stale frames)
-* Chat/streaming text: Ascending order (preserve message sequence)
-* Operations: Ascending order (preserve execution order)
-* Bulk transfers: Ascending order (sequential chunk delivery)
-
 ## Request/Response Pattern {#request-response}
 
 Request/response interactions use coordinated publish operations.
@@ -607,6 +627,9 @@ has subscribed to A's session namespace, receives the request, processes
 it, and publishes the response on its own corresponding track
 `("pace","agents","agent-b",{sid}) -- "ops/{req-id}"`. Agent A receives
 the response through its subscription to B's session namespace.
+
+For a detailed example of request/response over MOQT tracks, see
+{{MCP-MOQT}} which defines this pattern for MCP tool invocations.
 
 ## Streaming Pattern {#streaming}
 
@@ -652,122 +675,6 @@ Hierarchical Teams:
   Each level operates as a separate session with narrowed authorization
   scope. Delegation chains ({{identity-discovery}}) maintain an
   auditable path from the original user authorization.
-
-# Authorization and Security {#authorization}
-
-## Authorization Model
-
-PACE implements a behavior-driven authorization model where access
-tokens are scoped to specific operations an agent is permitted to
-perform.
-
-### Behavior-Driven Scopes
-
-Scopes are structured as `{domain}:{resource}:{action}:{constraints}`,
-bound to specific agent behaviors rather than roles. Constraints
-support dynamic limits (time bounds, resource limits, counts).
-
-### Delegated Authorization
-
-When agents invoke other agents, each delegation narrows the scope.
-Agent A (holding scope S) requests a sub-scope S' ⊂ S for Agent B.
-Agent B can further narrow to S'' ⊂ S' for downstream tools.
-Downstream agents cannot exceed their delegator's permissions.
-
-Authorization tokens are presented in SESSION_INIT and validated
-including the full delegation chain. Tokens are refreshed proactively
-before expiration.
-
-### Confirmation and Evidence
-
-For high-risk operations, PACE supports confirmation requirements
-where agents must present cryptographic evidence of approval (human,
-policy-check, or MFA) before the operation proceeds.
-
-## Transport Security
-
-All PACE communication is encrypted via TLS 1.3 (QUIC requirement).
-Agent identity tokens are cryptographically signed with short expiry.
-MOQT Common Access Tokens {{MoQ-C4M}} provide relay-level namespace
-authorization. Relay nodes cannot access payload content unless
-explicitly authorized as trusted intermediaries.
-
-## Privacy Considerations
-
-Agents SHOULD minimize shared data to what is necessary for the task.
-Long-lived sessions SHOULD support forward secrecy through periodic
-key rotation. Relay operators MUST NOT retain content beyond
-operational necessity.
-
-# MOQT Transport Binding Layer {#transport-binding}
-
-This section defines how PACE maps to MOQT primitives: connection
-setup, namespace operations, message serialization, and operation
-mappings. All namespace and track references follow the structure
-defined in {{namespace}}.
-
-## Connection Establishment {#connection-establishment}
-
-Agents MUST establish either a native QUIC connection or a WebTransport
-{{RFC9297}} session as defined in {{MoQ-TRANSPORT}}. For native QUIC
-connections, agents MUST use the ALPN value "moqt". For WebTransport,
-the protocol is negotiated using the "WT-Available-Protocols" mechanism
-as specified in {{MoQ-TRANSPORT}}.
-
-Upon establishing the MOQT session (CLIENT_SETUP / SERVER_SETUP), an
-agent performs the bootstrap sequence to make itself discoverable and
-ready to receive session invitations. This sequence is:
-
-1. **Announce**: PUBLISH_NAMESPACE on `("pace", "agents", {agent-id})`
-2. **Publish Agent Card**: Publish on track `"card"` under its namespace
-3. **Subscribe to inbox**: Subscribe to its own `"inbox"` track
-
-See {{agent-discovery}} for the full discovery flow that follows
-bootstrap.
-
-## Track Organization {#track-organization}
-
-Each agent publishes exclusively on its own tracks. Other agents
-subscribe to tracks they are interested in. The relay handles fan-out
-to all subscribers. This per-agent publishing model ensures clear
-ownership and enables relay caching.
-
-Namespace structure and track names are defined in {{namespace}}.
-Participants discover each other's session tracks using
-SUBSCRIBE_NAMESPACE on `("pace", "agents", {peer-agent-id}, {sid})`.
-
-## Message Serialization {#message-serialization}
-
-Protocol messages are encapsulated within MOQT objects using a PACE
-envelope prepended to the payload:
-
-| Field | Size | Description |
-|-------|------|-------------|
-| `version` | 1 byte | PACE envelope version (currently 0x01) |
-| `flags` | 1 byte | 0x01=compressed, 0x02=fragmented, 0x04=encrypted |
-| `length` | varint | Length of the serialized protocol message |
-| payload | variable | Serialized protocol message |
-
-Bindings SHOULD preserve native message formats. For example, A2A
-messages retain their JSON-RPC 2.0 format; the PACE envelope wraps
-the serialized JSON bytes.
-
-## Operation-to-Primitive Mapping {#operation-mapping}
-
-Mapping of PACE operations to MOQT primitives:
-
-| Operation | MOQT Mechanism | Namespace / Track |
-|-----------|----------------|-------------------|
-| Agent discovery | PUBLISH_NS + SUBSCRIBE_NS | `("pace","agents")` prefix |
-| Fetch Agent Card | SUBSCRIBE + OBJECT | `("pace","agents",{id}) -- "card"` |
-| Session discovery | SUBSCRIBE_NS | `("pace","discovery","sessions")` prefix |
-| Session invite | PUBLISH to inbox | `("pace","agents",{id}) -- "inbox"` |
-| Join session | SUBSCRIBE_NS on peer | `("pace","agents",{peer},{sid})` |
-| One-shot request | PUBLISH + OBJECT | `("pace","agents",{id},{sid}) -- "ops/{req-id}"` |
-| Streaming | PUBLISH + multiple OBJECTs | `-- "a2a/stream/{id}"` (groups) |
-| Cancellation | OBJECT on ctrl | `-- "ctrl"` |
-| Subscription | SUBSCRIBE (ongoing) | `-- "a2a/task/{id}"` |
-| Broadcast | PUBLISH + relay fan-out | Any track (relay fans out) |
 
 # Protocol Bindings {#protocol-bindings}
 
@@ -1041,29 +948,51 @@ protocol-specific priorities, and custom MOQT extension headers.
 Implementations SHOULD document extensions and MAY register them
 in the IANA PACE Protocol Binding Registry.
 
-## Multi-Agent Orchestration Patterns {#orchestration}
+# Authorization and Security {#authorization}
 
-Common coordination patterns built on PACE sessions and MOQT fan-out:
+## Authorization Model
 
-Sequential:
-: Each agent subscribes to its predecessor's response track and
-  publishes to the next agent's request track, forming a pipeline.
+PACE implements a behavior-driven authorization model where access
+tokens are scoped to specific operations an agent is permitted to
+perform.
 
-Concurrent (Broadcast):
-: A coordinator publishes a single request; relay fan-out delivers
-  it to all subscribing specialists. Results are published back to
-  tracks the coordinator subscribes to.
+### Behavior-Driven Scopes
 
-Handoff:
-: Agent A publishes a HANDOFF message on the control track. Agent B
-  subscribes to the task track, receives cached context from the
-  relay, and continues execution without explicit state transfer.
+Scopes are structured as `{domain}:{resource}:{action}:{constraints}`,
+bound to specific agent behaviors rather than roles. Constraints
+support dynamic limits (time bounds, resource limits, counts).
 
-Hierarchical:
-: Coordinators create child PACE sessions for sub-task delegation.
-  Delegation chains ensure authorization propagates through the
-  hierarchy (see {{topologies}}).
+### Delegated Authorization
 
+When agents invoke other agents, each delegation narrows the scope.
+Agent A (holding scope S) requests a sub-scope S' ⊂ S for Agent B.
+Agent B can further narrow to S'' ⊂ S' for downstream tools.
+Downstream agents cannot exceed their delegator's permissions.
+
+Authorization tokens are presented in SESSION_INIT and validated
+including the full delegation chain. Tokens are refreshed proactively
+before expiration.
+
+### Confirmation and Evidence
+
+For high-risk operations, PACE supports confirmation requirements
+where agents must present cryptographic evidence of approval (human,
+policy-check, or MFA) before the operation proceeds.
+
+## Transport Security
+
+All PACE communication is encrypted via TLS 1.3 (QUIC requirement).
+Agent identity tokens are cryptographically signed with short expiry.
+MOQT Common Access Tokens {{MoQ-C4M}} provide relay-level namespace
+authorization. Relay nodes cannot access payload content unless
+explicitly authorized as trusted intermediaries.
+
+## Privacy Considerations
+
+Agents SHOULD minimize shared data to what is necessary for the task.
+Long-lived sessions SHOULD support forward secrecy through periodic
+key rotation. Relay operators MUST NOT retain content beyond
+operational necessity.
 
 # Scalability and Reliability {#scalability}
 
@@ -1090,41 +1019,7 @@ Session recovery mechanics are defined in {{session-recovery}}.
 
 # Security Considerations
 
-## Threat Model
-
-PACE considers the following threats:
-
-* Unauthorized agents joining sessions or impersonating legitimate agents
-* Man-in-the-middle attacks on agent communications
-* Privilege escalation through delegation chain manipulation
-* Denial of service via excessive session creation or message flooding
-* Data exfiltration through compromised relay nodes
-* Hallucination-driven operations by compromised or malfunctioning agents
-
-## Mitigations
-
-* All transport is encrypted via TLS 1.3 (QUIC requirement)
-* Agent identity tokens are cryptographically signed with short expiry
-* Delegation chains are validated end-to-end at each hop
-* Relay authorization via MOQT Common Access Tokens restricts namespace access
-* Rate limiting at relay nodes prevents flooding
-* Confirmation requirements for high-risk operations prevent
-  hallucination-driven damage
-* Session timeout and explicit termination prevent resource exhaustion
-
-## Relay Trust Model
-
-MOQT relays are trusted for routing but not content inspection. Relay
-operators:
-
-* MUST NOT inspect or modify message payloads
-* MUST enforce namespace-level access control
-* MUST implement rate limiting and abuse prevention
-* MAY cache objects for operational efficiency
-* MUST NOT retain cached content beyond operational necessity
-
-For end-to-end confidentiality from relay operators, agents MAY
-implement payload encryption above the PACE layer.
+TODO
 
 # IANA Considerations
 
@@ -1178,24 +1073,6 @@ message types:
 
 --- back
 
-# Transport Comparison {#transport-comparison}
-
-The following table compares MOQT (as used by PACE) with alternative
-transports for agent communication:
-
-| Feature | HTTP/JSON-RPC | gRPC | REST/SSE | MOQT (PACE) |
-|---------|---------------|------|----------|--------------|
-| Pub/Sub Native | No | Limited | No | Yes |
-| Multi-party Broadcast | Polling | N/A | Fan-out only | Native fan-out |
-| Relay/CDN Support | Separate infra | N/A | CDN possible | Built-in |
-| Priority QoS | Application layer | Per-stream | None | Per-object (0-255) |
-| Connection Migration | No | Limited | No | QUIC native |
-| Late Join | N/A | N/A | N/A | Group-based |
-| Streaming Granularity | Message-level | Stream | SSE events | Object/Group |
-| Discovery | Well-known URI | Service registry | Well-known URI | SUBSCRIBE_NAMESPACE |
-| Session Recovery | Re-establish | Reconnect | Reconnect | Relay cache + resume |
-| Multi-Modal Concurrent | Multiple conns | Multiple streams | Multiple conns | Single session |
-
 # Example Workflows {#example-workflows}
 
 This appendix illustrates common PACE workflows end-to-end, showing
@@ -1224,11 +1101,11 @@ Agent B publishes:
 
 **Flow**:
 
-1. A publishes SESSION_INIT on its `"ctrl"` track and sends an invite
-   to B's inbox
-2. B accepts, subscribes to A's session namespace, publishes
-   SESSION_ACCEPT on its own `"ctrl"` track
-3. A subscribes to B's session namespace
+1. A publishes SESSION_INIT on its `"ctrl"` track — the relay forwards
+   to B via B's SUBSCRIBE_TRACKS prefix match
+2. B accepts the forwarded PUBLISH, publishes SESSION_ACCEPT on its
+   own `"ctrl"` track
+3. A receives SESSION_ACCEPT via the relay (A's SUBSCRIBE_TRACKS on B)
 4. A publishes a JSON-RPC request on `"a2a/request/r1"`:
    `{"jsonrpc":"2.0","method":"message/send","params":{...},"id":"r1"}`
 5. B receives the request (via its subscription to A's namespace),
@@ -1271,8 +1148,9 @@ Tool publishes:
 Agent A (coordinator) creates a research session and invites Agent B
 (web researcher) and Agent C (data analyst) to collaborate.
 
-**Setup**: Agent A generates session-id `s3`, invites B and C via their
-inbox tracks.
+**Setup**: Agent A generates session-id `s3` and publishes SESSION_INIT
+on its ctrl track — the relay forwards to B and C via their
+SUBSCRIBE_TRACKS prefix match on A's agent namespace.
 
 **Resulting namespace layout**:
 
