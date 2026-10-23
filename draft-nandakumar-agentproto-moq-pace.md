@@ -45,7 +45,7 @@ normative:
   RFC8446:
   MoQ-TRANSPORT:
     title: "Media over QUIC Transport"
-    date: 2026-01
+    date: 2026-10
     author:
     - ins: L. Curley
     - ins: K. Pugin
@@ -53,7 +53,7 @@ normative:
     - ins: V. Vasiliev
     - ins: I. Swett
     seriesinfo:
-      Internet-Draft: draft-ietf-moq-transport-16
+      Internet-Draft: draft-ietf-moq-transport-22
     target: https://datatracker.ietf.org/doc/draft-ietf-moq-transport/
 
 informative:
@@ -316,8 +316,9 @@ connections, agents MUST use the ALPN value "moqt". For WebTransport,
 the protocol is negotiated using the "WT-Available-Protocols" mechanism
 as specified in {{MoQ-TRANSPORT}}.
 
-Upon establishing the MOQT session (CLIENT_SETUP / SERVER_SETUP), an
-agent performs the bootstrap sequence to make itself discoverable:
+Upon establishing the MOQT session via the SETUP message exchange
+defined in {{MoQ-TRANSPORT}}, an agent performs the bootstrap sequence
+to make itself discoverable:
 
 1. **Announce**: PUBLISH_NAMESPACE on `("pace", "agents", {agent-id})`
 2. **Publish Agent Card**: PUBLISH on track `"card"` under its namespace
@@ -336,6 +337,30 @@ fan-out to all subscribers via prefix matching. This per-agent
 publishing model ensures clear ownership and enables relay caching.
 
 Namespace structure and track names are defined in {{namespace}}.
+
+### MOQT Control Messages Used by PACE {#moqt-messages}
+
+PACE leverages the MOQT control messages defined in {{MoQ-TRANSPORT}}
+(draft-ietf-moq-transport-22) as follows:
+
+| MOQT Message | PACE Use |
+|--------------|---------|
+| SETUP | Session startup; carries PACE setup parameters ({{transport-binding}}) |
+| PUBLISH_NAMESPACE | Agent announces its namespace prefix on bootstrap |
+| SUBSCRIBE_NAMESPACE | Discover agents matching `("pace","agents")` prefix |
+| NAMESPACE, NAMESPACE_DONE | Relay/publisher responses to SUBSCRIBE_NAMESPACE |
+| SUBSCRIBE_TRACKS | Follow all tracks under a peer's agent prefix (session discovery) |
+| PUBLISH | Publisher offers a specific track (SESSION_INIT, chat, media, operations) |
+| PUBLISH_SKIPPED | Publisher cannot create subscription for a SUBSCRIBE_TRACKS match |
+| SUBSCRIBE | Subscriber-initiated subscription to a known track |
+| PUBLISH_STATE_NOTIFY | Signal track-level state changes (e.g., task state transitions) |
+| REQUEST_UPDATE | Pause/resume a subscription, change priority or filters |
+| FETCH, FETCH_OK | Retrieve a bounded range of past objects (`GetTask`, audit replay) |
+| SUBSCRIBE + FILL_PARAMETERS | Join fetch: catch up on history and follow live atomically |
+| PUBLISH_DONE | Terminate a published track (end of streaming op, session close) |
+| NAMESPACE_DONE | Agent leaving the network; stop accepting new subscriptions |
+| TRACK_STATUS | Query track existence/largest object without subscribing |
+| GOAWAY | Graceful MOQT session termination |
 
 ### Message Serialization {#message-serialization}
 
@@ -450,8 +475,11 @@ The SESSION_INIT object contains:
 
 ### MOQT Setup Extensions
 
-PACE defines the following MOQT setup parameters negotiated during
-CLIENT_SETUP/SERVER_SETUP:
+In addition to the base parameters defined in {{MoQ-TRANSPORT}} (such as
+AUTHORITY, PATH, AUTHORIZATION_TOKEN, MAX_AUTH_TOKEN_CACHE_SIZE,
+MAX_FILTER_RANGES, MAX_REQUEST_UPDATES, and MOQT_IMPLEMENTATION), PACE
+defines the following MOQT setup parameters, negotiated in the SETUP
+message exchange:
 
 | Parameter | ID | Description |
 |-----------|-----|-------------|
@@ -475,6 +503,19 @@ on the control track. Updates can modify modalities, participants,
 authorization scopes, or timeout. All participants MUST acknowledge
 the update before new parameters take effect.
 
+Participants MAY use MOQT's REQUEST_UPDATE message {{MoQ-TRANSPORT}} to
+modify per-subscription parameters (such as pausing delivery via
+FORWARD=0, resuming via FORWARD=1, or changing priorities and filters)
+without re-establishing the subscription. REQUEST_UPDATE is well-suited
+to track-level transitions that do not require session-wide consensus
+(for example, temporarily pausing a video track while continuing
+chat and ctrl tracks).
+
+Publishers signal track-level state changes to subscribers using
+PUBLISH_STATE_NOTIFY {{MoQ-TRANSPORT}} (for example, to indicate a
+track has become unavailable, or that delivery conditions have
+changed) separately from object delivery.
+
 ## Session Recovery {#session-recovery}
 
 PACE provides graceful recovery from network and server failures:
@@ -494,9 +535,29 @@ Session Resumption:
   prefix. The relay delivers cached objects from the point of
   disconnection.
 
+Join Fetch for Mid-Conversation Catch-Up:
+: Agents joining a session in progress (or recovering after a
+  disconnect) use the fill fetch mechanism defined in
+  {{MoQ-TRANSPORT}}. The subscriber issues SUBSCRIBE with a
+  FILL_PARAMETERS extension on the ctrl, chat, or operation track;
+  the publisher opens a unidirectional fill fetch stream delivering
+  the historical range (typically the latest complete group) before
+  live objects resume on the subscription. This provides atomic
+  "catch up on prior state, then follow live" semantics without a
+  separate FETCH roundtrip.
+
+Bounded Historical Fetch:
+: For deterministic retrieval of a specific range of past objects
+  (for example, replaying an audit log or recovering a specific
+  task's output history), agents use FETCH with explicit Start and
+  End Locations. The publisher confirms the actual End Location in
+  FETCH_OK.
+
 State Checkpointing:
 : Agents SHOULD periodically publish state checkpoints on a dedicated
-  track, enabling recovery after relay failures.
+  track, enabling recovery after relay failures. Recovering agents
+  use a join fetch to retrieve the latest checkpoint and then
+  follow the live stream.
 
 ## Session Termination
 
@@ -504,6 +565,18 @@ Sessions terminate explicitly via SESSION_CLOSE on the control track or
 implicitly via timeout. Upon termination, all subscriptions are
 cancelled, pending operations receive cancellation notifications, and
 session resources are released after a configurable grace period.
+
+After publishing SESSION_CLOSE, each agent SHOULD send PUBLISH_DONE
+{{MoQ-TRANSPORT}} on every session track it was publishing (ctrl,
+chat, audio, video, and any operation tracks). PUBLISH_DONE signals
+that no further objects will be delivered on the track, allowing
+subscribers and relays to release state without waiting for timeouts.
+
+When an agent is leaving the network entirely (not just a single
+session), it SHOULD send NAMESPACE_DONE {{MoQ-TRANSPORT}} on its agent
+namespace to signal that it will not accept new subscriptions.
+Combined with PUBLISH_DONE on each live track, this provides clean
+shutdown semantics.
 
 # Agent Identity and Discovery {#identity-discovery}
 
@@ -660,7 +733,19 @@ for that phase.
 
 Late-joining subscribers receive the latest complete group from relay
 cache, enabling mid-operation catch-up without replaying the full
-history.
+history. For deterministic recovery of a specific range, subscribers
+MAY issue SUBSCRIBE with FILL_PARAMETERS (join fetch) to receive the
+historical range on a fill fetch stream before live objects resume on
+the subscription.
+
+Upon operation completion, the publisher sends PUBLISH_DONE on the
+operation track to signal end-of-stream. Receivers treat PUBLISH_DONE
+as the authoritative completion marker; publishers MUST NOT emit
+further objects on that track after PUBLISH_DONE.
+
+To cancel an in-progress streaming operation, the subscriber sends
+REQUEST_UPDATE with FORWARD=0 to pause delivery, or the publisher
+sends PUBLISH_DONE early to abort the stream.
 
 ## Real-Time Media Exchange
 
@@ -754,11 +839,12 @@ The following table maps A2A v0.3.0 operations to MOQT primitives:
 | A2A Operation | MOQT Mechanism | Track Name |
 |---------------|----------------|------------|
 | `SendMessage` | PUBLISH + OBJECT | `a2a/request/{req-id}` |
-| `SendStreamingMessage` | PUBLISH + multiple OBJECTs | `a2a/stream/{req-id}` |
-| `GetTask` | SUBSCRIBE + OBJECT | `a2a/task/{task-id}` |
+| `SendStreamingMessage` | PUBLISH + OBJECTs + PUBLISH_DONE | `a2a/stream/{req-id}` |
+| `GetTask` | FETCH (bounded range) | `a2a/task/{task-id}` |
 | `ListTasks` | SUBSCRIBE_NAMESPACE | (discover `a2a/task/*` tracks) |
-| `CancelTask` | OBJECT on ctrl track | `ctrl` |
-| `SubscribeToTask` | SUBSCRIBE (ongoing) | `a2a/task/{task-id}` |
+| `CancelTask` | REQUEST_UPDATE (FORWARD=0) or PUBLISH_DONE | `a2a/task/{task-id}` |
+| `SubscribeToTask` | SUBSCRIBE (optionally with FILL_PARAMETERS) | `a2a/task/{task-id}` |
+| `TaskStateChanged` | PUBLISH_STATE_NOTIFY | `a2a/task/{task-id}` |
 | `GetExtendedAgentCard` | SUBSCRIBE + OBJECT | Agent's `card` track |
 | `SetPushNotificationConfig` | PUBLISH + OBJECT | `a2a/notify/config` |
 | `GetPushNotificationConfig` | SUBSCRIBE + OBJECT | `a2a/notify/config` |
