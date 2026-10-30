@@ -360,6 +360,16 @@ ones.
 Live dialogs ({{scope}}) place the following requirements on the
 transport that carries them.
 
+Low latency:
+: Each flow reaches participants within the latency its modality
+  needs: under 100 ms for real-time media, and under a second for chat
+  and streaming model output ({{data-exchange}}). A loss or a backlog
+  on one flow does not add delay to another.
+
+Push delivery:
+: Content, new participants, new flows, and new dialogs reach
+  participants as soon as they are published, without polling.
+
 Interruption:
 : Dialog control, such as an interruption or a cancellation, reaches
   its receiver ahead of content that is already queued. Real-time
@@ -368,16 +378,12 @@ Interruption:
 
 Concurrent flows:
 : Real-time media, chat, streaming model output, tool calls, and bulk
-  transfers share one dialog. Each keeps its own priority and
-  reliability, and none of them delays the others.
+  transfers share one dialog and one connection, each with its own
+  priority and reliability.
 
 Fan-out:
 : One message reaches every participant without the sender sending a
   copy to each. Participants that join late or reconnect can catch up.
-
-Push delivery:
-: Participants learn of new participants, flows, and dialogs as they
-  appear, without polling.
 
 Continuity:
 : A dialog survives connection migration, network changes,
@@ -401,13 +407,26 @@ protocol over QUIC. It meets each requirement in
 {{transport-requirements}} with a transport mechanism, so agent
 protocols do not need to rebuild them.
 
+Low latency:
+: Objects are sent as soon as they are produced, on QUIC streams or
+  datagrams alike, and relays forward them as they arrive, without
+  waiting for the rest of a group. Each track has its own streams, so
+  a loss on one flow does not hold up the others. Datagrams are not
+  retransmitted, so real-time media keeps flowing under congestion
+  instead of waiting for lost data.
+
+Push delivery:
+: Agents publish and subscribe directly, with no polling and no
+  long-lived HTTP connections. Content reaches subscribers as soon as
+  it is published. SUBSCRIBE_TRACKS on a namespace prefix delivers all
+  current and future tracks under that prefix, so new dialogs and
+  flows appear without a separate signaling channel.
+
 Interruption:
 : Publisher priority (per subgroup or datagram) and subscriber priority
   (per subscription) let dialog control overtake queued
-  lower-priority data. Each track is carried on its own QUIC streams or
-  datagrams, so a loss on one flow does not stall the others. A
-  cancellation therefore reaches the agent ahead of output already in
-  flight. Per-track delivery timeouts let the publisher mark
+  lower-priority data, so a cancellation reaches the agent ahead of
+  output already in flight. Per-track delivery timeouts let the publisher mark
   time-sensitive objects: objects that miss the deadline, such as a
   voice frame whose playout window has passed, are dropped at the relay
   instead of wasting bandwidth and queue depth.
@@ -426,12 +445,6 @@ Fan-out:
   code, and the publisher keeps no per-subscriber state. Relay caches
   let late-joining or reconnecting agents catch up without the
   publisher retransmitting.
-
-Push delivery:
-: Agents publish and subscribe directly, with no polling and no
-  long-lived HTTP connections. SUBSCRIBE_TRACKS on a namespace prefix
-  delivers all current and future tracks under that prefix, so new
-  dialogs and flows appear without a separate signaling channel.
 
 Continuity:
 : QUIC provides connection migration (for example, from Wi-Fi to
