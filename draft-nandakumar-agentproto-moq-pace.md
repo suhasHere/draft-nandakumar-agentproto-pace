@@ -127,6 +127,24 @@ informative:
     seriesinfo:
       Internet-Draft: draft-jennings-agentproto-mcp-over-moqt
     target: https://datatracker.ietf.org/doc/draft-jennings-agentproto-mcp-over-moqt/
+  STIVERS:
+    title: "Universals and cultural variation in turn-taking in conversation"
+    date: 2009-06
+    author:
+    - ins: T. Stivers
+    - ins: N. J. Enfield
+    - ins: P. Brown
+    - ins: C. Englert
+    - ins: M. Hayashi
+    - ins: T. Heinemann
+    - ins: G. Hoymann
+    - ins: F. Rossano
+    - ins: J. P. de Ruiter
+    - ins: K.-E. Yoon
+    - ins: S. C. Levinson
+    seriesinfo:
+      DOI: 10.1073/pnas.0903616106
+    refcontent: "Proceedings of the National Academy of Sciences, vol. 106, no. 26, pp. 10587-10592"
   SD-AGENT:
     title: "SD Agent: Selective Disclosure for Agent Discovery and Identity Management"
     date: 2026-02
@@ -191,6 +209,15 @@ context through their own extension points ({{protocol-bindings}}).
 
 ## Scope and Goals {#scope}
 
+Agent interactions are increasingly live dialogs rather than one-shot
+requests. A user speaks while an agent answers, cuts in, and expects
+the agent to stop. Voice and video run alongside chat, streaming model
+output, and tool calls. Several agents and people work on the same
+task, and the task can outlast a single connection or network. In
+natural spoken conversation, people take turns within a few hundred
+milliseconds {{STIVERS}}, so an interruption has to take effect ahead of output
+that is already queued. PACE is designed for these dialogs.
+
 PACE addresses the following goals.
 
 Dialog correlation:
@@ -198,6 +225,24 @@ Dialog correlation:
   trust boundaries, modality changes, and time. Defined by the dialog
   context: identifier, generation, state, controller, and
   participants ({{dialog-context}}).
+
+Multi-modal exchange:
+: Real-time media, chat, streaming model output, and request/response
+  operations in one dialog. Each modality keeps its own latency and
+  reliability, and none of them delays the others, even when they
+  share one transport session ({{data-exchange}}).
+
+Multi-party exchange:
+: Point-to-point, point-to-multipoint, and multi-party dialogs among
+  agents and people. Relays fan out each message, so a sender
+  publishes once however many participants there are, and late
+  joiners catch up from relay caches ({{topologies}}).
+
+Low-latency interaction:
+: Dialog control, including interruption and cancellation, takes
+  effect within the latency of natural conversation and ahead of
+  queued content, so that agents can hold an interactive voice
+  conversation ({{data-exchange}}).
 
 Dialog lifecycle:
 : Opening, updating, and terminating dialogs, and revoking
@@ -214,13 +259,8 @@ Transport independence:
   specifies a MOQT binding: namespaces, tracks, operation mapping,
   and delivery ({{moqt-binding}}).
 
-Multi-modal, multi-party exchange:
-: Media, chat, and request/response operations in one dialog, with
-  relay fan-out for point-to-point, point-to-multipoint, and
-  multi-party topologies ({{moqt-binding}}).
-
 Application protocol reuse:
-: A2A, MCP, AutoGen, and the Personal Agent Protocol keep their native
+: MCP, the Personal Agent Protocol, AutoGen, and A2A keep their native
   messages and carry the dialog context ({{protocol-bindings}}).
 
 Identity and authorization reuse:
@@ -315,57 +355,115 @@ blocks used across these layers. PACE integrates them
 ({{identity-discovery}}, {{authorization}}) but does not define new
 ones.
 
+## Transport Requirements {#transport-requirements}
+
+Live dialogs ({{scope}}) place the following requirements on the
+transport that carries them.
+
+Low latency:
+: Each flow reaches participants within the latency its modality
+  needs: under 100 ms for real-time media, and under a second for chat
+  and streaming model output ({{data-exchange}}). A loss or a backlog
+  on one flow does not add delay to another.
+
+Push delivery:
+: Content, new participants, new flows, and new dialogs reach
+  participants as soon as they are published, without polling.
+
+Interruption:
+: Dialog control, such as an interruption or a cancellation, reaches
+  its receiver ahead of content that is already queued. Real-time
+  content that is too late to be useful is dropped instead of being
+  delivered late.
+
+Concurrent flows:
+: Real-time media, chat, streaming model output, tool calls, and bulk
+  transfers share one dialog and one connection, each with its own
+  priority and reliability.
+
+Fan-out:
+: One message reaches every participant without the sender sending a
+  copy to each. Participants that join late or reconnect can catch up.
+
+Continuity:
+: A dialog survives connection migration, network changes,
+  reconnection, and intermediaries.
+
+Scale and control:
+: Dialogs scale through intermediaries across regions, and each
+  intermediary enforces who may send and receive.
+
+Request/response mechanisms might not meet these requirements. When a
+dialog's flows share one ordered connection, a cancellation waits
+behind output that has already been sent, and one lost packet stalls
+every flow. Delivery to several participants, and learning about new
+ones, are left to the application.
+
 ## Why MOQT?
 
-This document specifies MOQT binding for exchaging dialogs.
-A binding is useful when it supports dialog continuity across
-connection changes, reliable delivery of lifecycle control,
-distribution through intermediaries, and concurrent control and
-application-data flows.
+This document specifies a MOQT binding for exchanging dialogs. Media
+over QUIC Transport (MOQT) {{MoQ-TRANSPORT}} is a publish/subscribe
+protocol over QUIC. It meets each requirement in
+{{transport-requirements}} with a transport mechanism, so agent
+protocols do not need to rebuild them.
 
-Media over QUIC Transport (MOQT) {{MoQ-TRANSPORT}} is a
-publish/subscribe protocol over QUIC. It suits long-lived,
-multi-participant dialogs that combine control with real-time media,
-for several reasons:
+Low latency:
+: Objects are sent as soon as they are produced, on QUIC streams or
+  datagrams alike, and relays forward them as they arrive, without
+  waiting for the rest of a group. Each track has its own streams, so
+  a loss on one flow does not hold up the others. Datagrams are not
+  retransmitted, so real-time media keeps flowing under congestion
+  instead of waiting for lost data.
 
-* Agents publish and subscribe directly; no polling or long-lived HTTP
-  connections, and the relay handles fan-out.
-* SUBSCRIBE_TRACKS on a namespace prefix delivers all current and
-  future tracks under that prefix, so new dialogs appear without a
-  separate signaling channel.
-* Relays handle NAT traversal, load balancing, and fan-out without
-  requiring direct peer-to-peer connections.
-* A single PUBLISH reaches every subscriber through the relay, so
+Push delivery:
+: Agents publish and subscribe directly, with no polling and no
+  long-lived HTTP connections. Content reaches subscribers as soon as
+  it is published. SUBSCRIBE_TRACKS on a namespace prefix delivers all
+  current and future tracks under that prefix, so new dialogs and
+  flows appear without a separate signaling channel.
+
+Interruption:
+: Publisher priority (per subgroup or datagram) and subscriber priority
+  (per subscription) let dialog control overtake queued
+  lower-priority data, so a cancellation reaches the agent ahead of
+  output already in flight. Per-track delivery timeouts let the publisher mark
+  time-sensitive objects: objects that miss the deadline, such as a
+  voice frame whose playout window has passed, are dropped at the relay
+  instead of wasting bandwidth and queue depth.
+
+Concurrent flows:
+: One MOQT session carries sub-100ms media, sub-second chat, and
+  best-effort bulk transfers at the same time, in one congestion
+  control context. Objects can be delivered over QUIC datagrams, which
+  suit real-time audio and video where lower latency matters more than
+  retransmission, or over QUIC streams, which suit agent chat,
+  operations, and bulk transfers that need ordered, reliable delivery.
+
+Fan-out:
+: A single PUBLISH reaches every subscriber through the relay, so
   multi-agent collaboration does not need application-level broadcast
-  code.
-* Relay caches let late-joining or reconnecting agents catch up
-  without the publisher retransmitting.
-* Publisher priority (per subgroup or datagram) and subscriber
-  priority (per subscription), let audio/video, control
-  messages, and bulk transfers share one MOQT session and
-  congestion control context.
-* Objects can be delivered over QUIC streams or over QUIC datagrams.
-  Datagram delivery suits real-time audio and video frames, where
-  lower latency matters more than retransmission; streams suit agent
-  chat, operations, and bulk transfers that need ordered reliable delivery.
-* Per-track delivery timeouts let the publisher mark time-sensitive
-  objects. Objects that miss the deadline (e.g., a voice frame whose
-  playout window has passed) are dropped at the relay instead of
-  wasting bandwidth and queue depth.
-* The same MOQT session can carry sub-100ms media, sub-second chat,
-  and best-effort bulk transfers at the same time.
-* Relays can be stacked hierarchically to distribute load across
-  regions without an all-to-all connection mesh.
-* QUIC gives connection migration (e.g., WiFi to cellular), stream
-  multiplexing, 0-RTT resumption, and TLS 1.3.
-* Where UDP is blocked, the same MOQT binding can run over QMux
-  {{QMUX}}, which provides QUIC stream and datagram operations over
-  TLS over TCP. Agents keep one protocol stack instead of falling back
-  to a separate one, at the cost of TCP head-of-line blocking and
-  reliable, ordered datagrams.
-* Namespace-level access control maps onto agent authorization
+  code, and the publisher keeps no per-subscriber state. Relay caches
+  let late-joining or reconnecting agents catch up without the
+  publisher retransmitting.
+
+Continuity:
+: QUIC provides connection migration (for example, from Wi-Fi to
+  cellular) and 0-RTT resumption. A dialog is not tied to a MOQT
+  session: one dialog can span several sessions ({{terminology}}).
+
+Scale and control:
+: Relays handle NAT traversal, load balancing, and fan-out without
+  direct peer-to-peer connections, and they can be stacked
+  hierarchically to spread load across regions without an all-to-all
+  mesh. Namespace-level access control maps onto agent authorization
   scopes: the relay decides who may publish or subscribe to each
-  namespace.
+  namespace. QUIC provides TLS 1.3 for every hop.
+
+Where UDP is blocked, the same MOQT binding can run over QMux
+{{QMUX}}, which provides QUIC stream and datagram operations over TLS
+over TCP. Agents keep one protocol stack instead of falling back to a
+separate one, at the cost of TCP head-of-line blocking and reliable,
+ordered datagrams.
 
 # Agentic Dialog Management {#dialog-management}
 
@@ -814,122 +912,36 @@ authoritative, and finding a dialog does not make an agent a
 participant. Controllers SHOULD NOT advertise dialogs whose existence
 is itself sensitive ({{privacy}}).
 
-The following flow shows Agent C finding and joining dialog `D`,
-which Agent A controls. In the figure, `disc` stands for
-`"pace","discovery"`, `agents` for `"pace","agents"`, `-- x` names
-the track, and `a.ctrl: M` is control message M sent as an object on
-A's `ctrl` track. Each agent writes only to its own tracks; the relay
-forwards the objects of a track unchanged, one hop at a time.
+Discovery and joining proceed in four steps:
 
-~~~
-Agent C                     Relay                      Agent A
-                                                     (controller)
-  |                           |                           |
-  |                           |<---- PUBLISH_NAMESPACE ---|     (1)
-  |                           |      (disc,dialogs,a)     |
-  |                           |<------ PUBLISH  -- D -----|
-  |                           |         descriptor        |
-  |                           |<---- SUBSCRIBE_TRACKS ----|     (2)
-  |                           |       (disc,joins,a)      |
-  |                           |                           |
-  |---- SUBSCRIBE_NAMESPACE ->|                           |     (3)
-  |       (disc,dialogs)      |                           |
-  |<----- NAMESPACE  (a) -----|                           |
-  |----- SUBSCRIBE_TRACKS --->|                           |     (4)
-  |      (disc,dialogs,a)     |                           |
-  |<------ PUBLISH  -- D -----|                           |
-  |-------- PUBLISH_OK ------>|                           |
-  |<---- descriptor object ---|                           |
-  |                           |                           |
-  |------- PUBLISH  -- c ---->|                           |     (5)
-  |      (disc,joins,a,D)     |                           |
-  |<------- PUBLISH_OK -------|                           |
-  |--- object: JOIN_REQUEST ->|                           |
-  |                           |------- PUBLISH  -- c ---->|     (6)
-  |                           |<------- PUBLISH_OK -------|
-  |                           |--- object: JOIN_REQUEST ->|
-  |                           |                           |
-  |                           |<---- SUBSCRIBE_TRACKS ----|     (7)
-  |                           |         (agents,c)        |
-  |                           |                           |
-  |----- SUBSCRIBE_TRACKS --->|                           |     (8)
-  |        (agents,a,D)       |                           |
-  |<---- PUBLISH  -- ctrl ----|                           |
-  |        (agents,a,D)       |                           |
-  |-------- PUBLISH_OK ------>|                           |
-  |                           |<----- a.ctrl: UPDATE -----|
-  |<----- a.ctrl: UPDATE -----|                           |
-  |         (c invited)       |                           |
-  |                           |                           |
-  |----- PUBLISH  -- ctrl --->|                           |     (9)
-  |        (agents,c,D)       |                           |
-  |<------- PUBLISH_OK -------|                           |
-  |------ c.ctrl: ACCEPT ---->|                           |
-  |                           |----- PUBLISH  -- ctrl --->|
-  |                           |        (agents,c,D)       |
-  |                           |<------- PUBLISH_OK -------|
-  |                           |------ c.ctrl: ACCEPT ---->|
-  |                           |                           |
-  |                           |<----- a.ctrl: UPDATE -----|     (10)
-  |<----- a.ctrl: UPDATE -----|                           |
-  |         (c active)        |                           |
-  |                           |                           |
-~~~
+Advertise:
+: The controller publishes a descriptor track for each dialog it offers
+  under its `dialogs` namespace. It also subscribes to every track under
+  its `joins` namespace, because it does not know in advance who will
+  ask to join.
 
-1. A issues PUBLISH_NAMESPACE on
-   `("pace","discovery","dialogs","agent-a")` and publishes the
-   descriptor track `D`. The PUBLISH_NAMESPACE lets agents that browse
-   the `dialogs` namespace learn that A has dialogs to offer; the
-   descriptor track gives them the details.
-2. A issues SUBSCRIBE_TRACKS on
-   `("pace","discovery","joins","agent-a")`. A does not know who will
-   ask to join, so it cannot subscribe to the joiners themselves. This
-   prefix subscription makes the relay forward to A any track that a
-   joiner later publishes under A's `joins` namespace.
-3. C issues SUBSCRIBE_NAMESPACE on `("pace","discovery","dialogs")`
-   and receives a NAMESPACE message naming `agent-a`. C does not know
-   in advance which agents offer dialogs. SUBSCRIBE_NAMESPACE returns
-   only namespaces, not tracks, so C can see who advertises without
-   receiving every descriptor.
-4. C issues SUBSCRIBE_TRACKS on
-   `("pace","discovery","dialogs","agent-a")` (or on the common prefix,
-   to cover all agents), accepts the PUBLISH the relay sends, and reads
-   the descriptor. C needs the descriptor to learn the dialog-id, the
-   controller, and the modalities before deciding to join.
-5. C publishes `("pace","discovery","joins","agent-a",D) --
-   "agent-c"`. A is not subscribed to C's own namespace, so a
-   JOIN_REQUEST on C's `ctrl` track would not reach A. Publishing
-   under A's `joins` namespace uses the subscription A made in step 2.
-   MOQT relay checks C's authorization to publish and then sends the JOIN_REQUEST
-   object to the relay.
-6. The relay matches the track against A's SUBSCRIBE_TRACKS and sends
-   its own PUBLISH to A, as for any track. A answers PUBLISH_OK to the
-   relay and receives the JOIN_REQUEST object. A validates the
-   credentials and decides whether to admit C. PUBLISH_OK from the
-   relay tells C only that the relay accepted the track, not that A
-   has seen the request.
-7. To admit C, A issues SUBSCRIBE_TRACKS on
-   `("pace","agents","agent-c")`. A needs to receive C's `ctrl` track
-   (for ACCEPT) and the dialog tracks C will publish later, and the
-   relay forwards them only to subscribers of that prefix.
-8. C issues SUBSCRIBE_TRACKS on `("pace","agents","agent-a",D)` so that
-   it will receive A's `ctrl` track, which carries the controller's
-   decision. Scoping the prefix to `D` gives C only this dialog's
-   tracks, not everything A publishes. C can issue this subscription
-   as early as step 5. A then publishes UPDATE on its `ctrl` track
-   with C marked `invited`, and the relay forwards it to C.
-9. C publishes ACCEPT on `("pace","agents","agent-c",D) -- "ctrl"`.
-   C can use its own `ctrl` track now because A follows C's prefix
-   (step 7). C no longer needs the join track and ends it with
-   PUBLISH_DONE.
-10. A publishes UPDATE with C marked `active`, which commits the
-    membership change at the next generation. Other participants
-    learn of C from this UPDATE and issue SUBSCRIBE_TRACKS on C's
-    dialog namespace, `("pace","agents","agent-c",D)`, to receive
-    C's tracks.
+Find:
+: A prospective participant browses `("pace","discovery","dialogs")` to
+  learn which agents offer dialogs, then reads the descriptors of the
+  agents it is interested in. The descriptor gives the dialog-id, the
+  controller, and the modalities, which the participant uses to decide
+  whether to join.
 
-A controller that declines simply does not invite C. C stops waiting
-after a local timeout and ends its join track with PUBLISH_DONE.
+Ask:
+: The prospective participant publishes a join track under the
+  controller's `joins` namespace. The controller's subscription delivers
+  the JOIN_REQUEST to it through the relay, and the controller validates
+  the credentials and decides whether to admit the participant.
+
+Admit:
+: The controller subscribes to the joiner's agent namespace and invites
+  the joiner with UPDATE on its `ctrl` track. The joiner answers with
+  ACCEPT on its own `ctrl` track and ends its join track. The
+  controller's next UPDATE marks the joiner `active`, and the other
+  participants then subscribe to the joiner's dialog namespace.
+
+A controller that declines does not invite the joiner. The joiner stops
+waiting after a local timeout and ends its join track with PUBLISH_DONE.
 
 ## Transport Binding {#transport-binding}
 
@@ -1429,8 +1441,8 @@ those protocols; any standardized mapping is coordinated with their
 maintainers.
 
 Over the MOQT binding, an application protocol's messages also need a
-place on MOQT tracks. This section defines that placement for A2A,
-MCP, AutoGen, the Personal Agent Protocol (Poppy), and a generic
+place on MOQT tracks. This section defines that placement for MCP,
+the Personal Agent Protocol (Poppy), AutoGen, A2A, and a generic
 JSON-RPC baseline for custom protocols. Each binding runs inside a
 PACE dialog, using the Dialog Communication Namespace ({{namespace}})
 and the channel architecture ({{data-exchange}}). Multiple bindings
@@ -1458,10 +1470,10 @@ the full context sends STATE_REQUEST.
 
 | Protocol | Carried in | Keep distinct from |
 |---|---|---|
-| A2A | Message `metadata` | `contextId`, `taskId` |
 | MCP | `_meta` | MCP session and JSON-RPC request IDs |
-| AutoGen | Message `metadata` | Conversation ID |
 | Poppy | Not needed: the conversation ID is the dialog-id ({{poppy-binding}}) | |
+| AutoGen | Message `metadata` | Conversation ID |
+| A2A | Message `metadata` | `contextId`, `taskId` |
 
 A dialog-id MUST NOT be used as a task, request, content, or session
 identifier, or as a credential.
@@ -1494,134 +1506,11 @@ In the tables of this section, a pattern such as
 
 | Protocol | Protocol Fields | Example Full Track Name |
 |----------|--------------|-------------------|
-| A2A | `"a2a"` | `("pace","agents","agent-a","s1","a2a","task") -- "t1"` |
 | MCP | `"mcp"` | `("pace","agents","fs-server","s1","mcp","tools","read") -- "response"` |
-| AutoGen | `"autogen"` | `("pace","agents","rt1","s1","autogen","message") -- "conv1"` |
 | Poppy | `"poppy"` | `("pace","agents","acme","s1","poppy","conversation") -- "events"` |
+| AutoGen | `"autogen"` | `("pace","agents","rt1","s1","autogen","message") -- "conv1"` |
+| A2A | `"a2a"` | `("pace","agents","agent-a","s1","a2a","task") -- "t1"` |
 | Generic | `"ext", {proto}` | `("pace","agents","agent-a","s1","ext","myproto","rpc") -- "call"` |
-
-## A2A Binding {#a2a-binding}
-
-The Agent-to-Agent Protocol {{A2A}} binding maps A2A task delegation
-and collaboration to MOQT primitives using the `"a2a"` protocol
-namespace field.
-
-### Namespace Structure
-
-A2A operates within a PACE dialog. Each agent publishes A2A messages
-on tracks under its own dialog namespace:
-
-~~~
-Namespace: ("pace", "agents", {agent-id}, {dialog-id}, "a2a",
-            {category})
-Tracks:    {identifier}
-~~~
-
-A2A track patterns:
-
-| Track Pattern | Purpose |
-|---------------|---------|
-| `("a2a", "request") -- {request-id}` | Outbound requests |
-| `("a2a", "response") -- {request-id}` | Request responses |
-| `("a2a", "stream") -- {request-id}` | Streaming operations |
-| `("a2a", "task") -- {task-id}` | Task lifecycle |
-| `("a2a", "notify") -- {type}` | Push notifications |
-
-### A2A Operation Mapping {#a2a-operation-mapping}
-
-The following table maps A2A v0.3.0 operations to MOQT primitives:
-
-| A2A Operation | MOQT Mechanism | Track |
-|---------------|----------------|------------|
-| `SendMessage` | PUBLISH + OBJECT | `("a2a", "request") -- {req-id}` |
-| `SendStreamingMessage` | PUBLISH + OBJECTs + PUBLISH_DONE | `("a2a", "stream") -- {req-id}` |
-| `GetTask` | FETCH (bounded range) | `("a2a", "task") -- {task-id}` |
-| `ListTasks` | SUBSCRIBE_TRACKS | (prefix `(..., {dialog-id}, "a2a", "task")`) |
-| `CancelTask` | PUBLISH + OBJECT (cancel request), then PUBLISH_DONE on the task track | `("a2a", "request") -- {req-id}` |
-| `SubscribeToTask` | SUBSCRIBE (optionally with FILL_PARAMETERS) | `("a2a", "task") -- {task-id}` |
-| `TaskStateChanged` | OBJECT (task status) | `("a2a", "task") -- {task-id}` |
-| `GetExtendedAgentCard` | SUBSCRIBE + OBJECT | Agent's `card` track |
-| `SetPushNotificationConfig` | PUBLISH + OBJECT | `("a2a", "notify") -- "config"` |
-| `GetPushNotificationConfig` | SUBSCRIBE + OBJECT | `("a2a", "notify") -- "config"` |
-
-### Message Format
-
-A2A messages are serialized as JSON-RPC 2.0 within MOQT objects,
-preserving A2A's native format. The JSON bytes are the object
-payload ({{message-serialization}}):
-
-~~~json
-{
-  "jsonrpc": "2.0",
-  "method": "message/send",
-  "params": {
-    "message": {
-      "role": "user",
-      "parts": [{"kind": "text", "text": "Hello agent"}]
-    }
-  },
-  "id": "req-001"
-}
-~~~
-
-### Priority Mapping
-
-| A2A Message Type | MOQT Priority Range | Description |
-|------------------|---------------------|-------------|
-| Cancel/Error | 0-31 | Task cancellation, critical errors |
-| SendMessage response | 32-63 | Responses requiring immediate delivery |
-| SendMessage request | 64-95 | Normal request messages |
-| Task status updates | 96-127 | Incremental task state changes |
-| Streaming artifacts | 96-127 | Streaming result data |
-| Discovery (Agent Card) | 128-159 | Agent card exchange |
-| Push notifications | 160-191 | Asynchronous notifications |
-| Background/bulk | 192-255 | Large file transfers, batch ops |
-
-### Streaming Support
-
-A2A streaming operations (SendStreamingMessage, task subscriptions) use
-the streaming pattern defined in {{streaming}}. A2A streaming events map
-to MOQT objects as follows:
-
-* Each streaming response creates a new MOQT group
-* TaskStatusUpdateEvent (state changes) and TaskArtifactUpdateEvent
-  (output data) are individual objects within groups
-* Groups represent execution phases (initialization, progress, completion)
-
-### A2A Agent Card with MOQT Extension {#a2a-agent-card}
-
-When operating over PACE, the A2A Agent Card includes a `moqt` extension
-block:
-
-~~~json
-{
-  "name": "research-assistant",
-  "protocolVersion": "0.3.0",
-  "capabilities": {"streaming": true, "pushNotifications": true},
-  "skills": [{"id": "web-research", "name": "Web Research"}],
-  "authentication": {"schemes": ["bearer", "oauth2"]},
-  "moqt": {
-    "relayEndpoint": "moqt://relay.example.com:4443",
-    "webTransportEndpoint": "https://relay.example.com:4443/moqt",
-    "namespace": ["pace", "agents", "research-assistant"],
-    "supportedExtensions": ["pace-v1"],
-    "maxConcurrentSubscriptions": 100,
-    "cacheTTL": 300
-  },
-  "signature": "base64-encoded-ed25519-signature"
-}
-~~~
-
-The `moqt` extension fields:
-
-| Field | Description |
-|-------|-------------|
-| `relayEndpoint` | Native QUIC endpoint for the MOQT relay |
-| `webTransportEndpoint` | WebTransport endpoint (alternative connectivity) |
-| `namespace` | Agent's namespace prefix as array |
-| `supportedExtensions` | MOQT/PACE extensions supported |
-| `maxConcurrentSubscriptions` | Maximum subscriptions the agent handles |
-| `cacheTTL` | Cache duration for the agent card (seconds) |
 
 ## MCP Binding {#mcp-binding}
 
@@ -1662,74 +1551,6 @@ Within PACE:
 The standalone MCP session discovery flow of {{MCP-MOQT}} is not used
 within PACE: PACE supplies the dialog-id, and peers learn each
 other's MCP tracks through SUBSCRIBE_TRACKS on the agent prefix.
-
-## AutoGen Binding {#autogen-binding}
-
-AutoGen {{AutoGen}} is a multi-agent conversation framework. This
-binding maps AutoGen's conversation patterns to MOQT within PACE
-dialogs.
-
-### Namespace Structure
-
-~~~
-Namespace: ("pace", "agents", {runtime-id}, {dialog-id}, "autogen",
-            {category})
-Tracks:    {identifier}
-~~~
-
-Where `runtime-id` is the AutoGen runtime instance identifier.
-
-| Track Pattern | Purpose |
-|---------------|---------|
-| `("autogen", "message") -- {conversation-id}` | Inter-agent messages |
-| `("autogen", "control") -- {command}` | Runtime control |
-| `("autogen", "state") -- {state-key}` | Agent state sync |
-| `("autogen", "result") -- {task-id}` | Final outputs |
-
-### Message Format
-
-AutoGen messages are serialized as JSON with the following structure:
-
-~~~json
-{
-  "sender": "agent-name",
-  "recipient": "agent-name | broadcast",
-  "content": "message content or structured data",
-  "metadata": {
-    "conversation_id": "conv-123",
-    "turn": 5,
-    "role": "assistant | user | system"
-  }
-}
-~~~
-
-### Conversation Patterns
-
-AutoGen's conversation patterns map to MOQT as follows:
-
-Two-Agent Chat:
-: Each agent publishes to their message track. Agents subscribe to
-  their conversation partner's track.
-
-Group Chat:
-: A coordinator agent manages turn-taking. All agents subscribe to
-  the coordinator's broadcast track.
-
-Nested Chat:
-: Hierarchical conversations use nested dialog-ids. An outer agent
-  creates a child PACE dialog for the inner conversation, linking
-  it to the parent via delegation chains.
-
-### Priority Mapping
-
-| AutoGen Message Type | MOQT Priority Range |
-|----------------------|---------------------|
-| Termination signals | 0-31 |
-| Human input requests | 32-63 |
-| Agent responses | 64-95 |
-| Function results | 96-127 |
-| State updates | 128-159 |
-| Logging/debug | 160-255 |
 
 ## Personal Agent Protocol Binding {#poppy-binding}
 
@@ -1858,6 +1679,197 @@ TODO
 | Messages and events | 64-95 | Interactive conversation |
 | `text-delta` | 64-95 | Streaming text |
 | Voice or video after handoff | 32-63 | Real-time media |
+
+## AutoGen Binding {#autogen-binding}
+
+AutoGen {{AutoGen}} is a multi-agent conversation framework. This
+binding maps AutoGen's conversation patterns to MOQT within PACE
+dialogs.
+
+### Namespace Structure
+
+~~~
+Namespace: ("pace", "agents", {runtime-id}, {dialog-id}, "autogen",
+            {category})
+Tracks:    {identifier}
+~~~
+
+Where `runtime-id` is the AutoGen runtime instance identifier.
+
+| Track Pattern | Purpose |
+|---------------|---------|
+| `("autogen", "message") -- {conversation-id}` | Inter-agent messages |
+| `("autogen", "control") -- {command}` | Runtime control |
+| `("autogen", "state") -- {state-key}` | Agent state sync |
+| `("autogen", "result") -- {task-id}` | Final outputs |
+
+### Message Format
+
+AutoGen messages are serialized as JSON with the following structure:
+
+~~~json
+{
+  "sender": "agent-name",
+  "recipient": "agent-name | broadcast",
+  "content": "message content or structured data",
+  "metadata": {
+    "conversation_id": "conv-123",
+    "turn": 5,
+    "role": "assistant | user | system"
+  }
+}
+~~~
+
+### Conversation Patterns
+
+AutoGen's conversation patterns map to MOQT as follows:
+
+Two-Agent Chat:
+: Each agent publishes to their message track. Agents subscribe to
+  their conversation partner's track.
+
+Group Chat:
+: A coordinator agent manages turn-taking. All agents subscribe to
+  the coordinator's broadcast track.
+
+Nested Chat:
+: Hierarchical conversations use nested dialog-ids. An outer agent
+  creates a child PACE dialog for the inner conversation, linking
+  it to the parent via delegation chains.
+
+### Priority Mapping
+
+| AutoGen Message Type | MOQT Priority Range |
+|----------------------|---------------------|
+| Termination signals | 0-31 |
+| Human input requests | 32-63 |
+| Agent responses | 64-95 |
+| Function results | 96-127 |
+| State updates | 128-159 |
+| Logging/debug | 160-255 |
+
+## A2A Binding {#a2a-binding}
+
+The Agent-to-Agent Protocol {{A2A}} binding maps A2A task delegation
+and collaboration to MOQT primitives using the `"a2a"` protocol
+namespace field.
+
+### Namespace Structure
+
+A2A operates within a PACE dialog. Each agent publishes A2A messages
+on tracks under its own dialog namespace:
+
+~~~
+Namespace: ("pace", "agents", {agent-id}, {dialog-id}, "a2a",
+            {category})
+Tracks:    {identifier}
+~~~
+
+A2A track patterns:
+
+| Track Pattern | Purpose |
+|---------------|---------|
+| `("a2a", "request") -- {request-id}` | Outbound requests |
+| `("a2a", "response") -- {request-id}` | Request responses |
+| `("a2a", "stream") -- {request-id}` | Streaming operations |
+| `("a2a", "task") -- {task-id}` | Task lifecycle |
+| `("a2a", "notify") -- {type}` | Push notifications |
+
+### A2A Operation Mapping {#a2a-operation-mapping}
+
+The following table maps A2A v0.3.0 operations to MOQT primitives:
+
+| A2A Operation | MOQT Mechanism | Track |
+|---------------|----------------|------------|
+| `SendMessage` | PUBLISH + OBJECT | `("a2a", "request") -- {req-id}` |
+| `SendStreamingMessage` | PUBLISH + OBJECTs + PUBLISH_DONE | `("a2a", "stream") -- {req-id}` |
+| `GetTask` | FETCH (bounded range) | `("a2a", "task") -- {task-id}` |
+| `ListTasks` | SUBSCRIBE_TRACKS | (prefix `(..., {dialog-id}, "a2a", "task")`) |
+| `CancelTask` | PUBLISH + OBJECT (cancel request), then PUBLISH_DONE on the task track | `("a2a", "request") -- {req-id}` |
+| `SubscribeToTask` | SUBSCRIBE (optionally with FILL_PARAMETERS) | `("a2a", "task") -- {task-id}` |
+| `TaskStateChanged` | OBJECT (task status) | `("a2a", "task") -- {task-id}` |
+| `GetExtendedAgentCard` | SUBSCRIBE + OBJECT | Agent's `card` track |
+| `SetPushNotificationConfig` | PUBLISH + OBJECT | `("a2a", "notify") -- "config"` |
+| `GetPushNotificationConfig` | SUBSCRIBE + OBJECT | `("a2a", "notify") -- "config"` |
+
+### Message Format
+
+A2A messages are serialized as JSON-RPC 2.0 within MOQT objects,
+preserving A2A's native format. The JSON bytes are the object
+payload ({{message-serialization}}):
+
+~~~json
+{
+  "jsonrpc": "2.0",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "role": "user",
+      "parts": [{"kind": "text", "text": "Hello agent"}]
+    }
+  },
+  "id": "req-001"
+}
+~~~
+
+### Priority Mapping
+
+| A2A Message Type | MOQT Priority Range | Description |
+|------------------|---------------------|-------------|
+| Cancel/Error | 0-31 | Task cancellation, critical errors |
+| SendMessage response | 32-63 | Responses requiring immediate delivery |
+| SendMessage request | 64-95 | Normal request messages |
+| Task status updates | 96-127 | Incremental task state changes |
+| Streaming artifacts | 96-127 | Streaming result data |
+| Discovery (Agent Card) | 128-159 | Agent card exchange |
+| Push notifications | 160-191 | Asynchronous notifications |
+| Background/bulk | 192-255 | Large file transfers, batch ops |
+
+### Streaming Support
+
+A2A streaming operations (SendStreamingMessage, task subscriptions) use
+the streaming pattern defined in {{streaming}}. A2A streaming events map
+to MOQT objects as follows:
+
+* Each streaming response creates a new MOQT group
+* TaskStatusUpdateEvent (state changes) and TaskArtifactUpdateEvent
+  (output data) are individual objects within groups
+* Groups represent execution phases (initialization, progress, completion)
+
+### A2A Agent Card with MOQT Extension {#a2a-agent-card}
+
+When operating over PACE, the A2A Agent Card includes a `moqt` extension
+block:
+
+~~~json
+{
+  "name": "research-assistant",
+  "protocolVersion": "0.3.0",
+  "capabilities": {"streaming": true, "pushNotifications": true},
+  "skills": [{"id": "web-research", "name": "Web Research"}],
+  "authentication": {"schemes": ["bearer", "oauth2"]},
+  "moqt": {
+    "relayEndpoint": "moqt://relay.example.com:4443",
+    "webTransportEndpoint": "https://relay.example.com:4443/moqt",
+    "namespace": ["pace", "agents", "research-assistant"],
+    "supportedExtensions": ["pace-v1"],
+    "maxConcurrentSubscriptions": 100,
+    "cacheTTL": 300
+  },
+  "signature": "base64-encoded-ed25519-signature"
+}
+~~~
+
+The `moqt` extension fields:
+
+| Field | Description |
+|-------|-------------|
+| `relayEndpoint` | Native QUIC endpoint for the MOQT relay |
+| `webTransportEndpoint` | WebTransport endpoint (alternative connectivity) |
+| `namespace` | Agent's namespace prefix as array |
+| `supportedExtensions` | MOQT/PACE extensions supported |
+| `maxConcurrentSubscriptions` | Maximum subscriptions the agent handles |
+| `cacheTTL` | Cache duration for the agent card (seconds) |
 
 ## Generic JSON-RPC Binding {#jsonrpc-binding}
 
@@ -2038,7 +2050,7 @@ TODO
 
 The examples below share these conventions:
 
-* `D1` to `D4` stand for dialog-ids (UUIDs). `A`, `B`, and `C` are
+* `D1` to `D5` stand for dialog-ids (UUIDs). `A`, `B`, and `C` are
   agents with agent-ids `agent-a`, `agent-b`, and `agent-c`.
 * Before each example, every agent has completed agent discovery
   ({{agent-discovery}}) and holds SUBSCRIBE_TRACKS on each peer's
@@ -2121,6 +2133,58 @@ dialog `D3`.
 | 1 | First code block |
 | 2 | Second code block |
 | 3 | Result: `{"status":"complete","totalLines":142}` |
+
+## Interrupting a Voice Agent
+
+A user's client, `U` (agent-id `user-u`), talks to a voice agent, `V`
+(agent-id `agent-v`). V answers by voice while a tool call it made to
+`search-tool` is still running. The user cuts in, and V has to stop
+speaking and cancel the tool call at once.
+
+~~~
+U publishes:
+  ("pace","agents","user-u",D5) -- "ctrl"          ACCEPT
+  ("pace","agents","user-u",D5) -- "audio"         microphone
+V publishes:
+  ("pace","agents","agent-v",D5) -- "ctrl"         OPEN, UPDATE
+  ("pace","agents","agent-v",D5) -- "audio"        speech
+  ("pace","agents","agent-v",D5) -- "chat"         reply text
+  ("pace","agents","agent-v",D5,"mcp","tools","search")
+      -- "request"                                 tools/call
+  ("pace","agents","agent-v",D5,"mcp","control")
+      -- "client-to-server"                        cancellation
+search-tool publishes:
+  ("pace","agents","search-tool",D5,"mcp","tools","search")
+      -- "response"                                results
+~~~
+
+1. V opens the dialog with U (OPEN, ACCEPT, UPDATE) and adds
+   search-tool the same way.
+2. V answers the user. It publishes speech on its `audio` track as
+   datagrams at media priority (32-63), with a short
+   OBJECT_DELIVERY_TIMEOUT, and the reply text on `chat` at interactive
+   priority (64-95). Its call to search-tool, Group 3 of the `search`
+   request track, is still running.
+3. The user starts speaking. U publishes microphone audio on its
+   `audio` track, and the relay forwards each frame to V as it
+   arrives. The dialog does not change.
+4. V detects the user's speech and stops producing speech and text. It
+   publishes `notifications/cancelled` for Group 3 on its MCP control
+   track at critical priority (0-15). The cancellation is sent ahead of
+   any `chat` objects V has already queued, and a loss on the audio
+   datagrams does not delay it.
+5. Speech objects that the relay has not delivered within their
+   delivery timeout are dropped at the relay, so the user does not
+   hear the rest of the old answer after cutting in.
+6. search-tool stops and publishes no further objects in Group 3. V
+   listens to the rest of the user's audio and answers in new groups
+   on its `audio` and `chat` tracks.
+
+The dialog, its generation, and the MOQT sessions stay the same
+throughout: an interruption changes the content of a dialog, not the
+dialog. If the dialog's flows shared one ordered connection, the
+cancellation in step 4 would wait behind the output V had already
+sent.
 
 ## Collaborating in a Multi-Party Dialog
 
