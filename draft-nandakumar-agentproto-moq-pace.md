@@ -127,6 +127,24 @@ informative:
     seriesinfo:
       Internet-Draft: draft-jennings-agentproto-mcp-over-moqt
     target: https://datatracker.ietf.org/doc/draft-jennings-agentproto-mcp-over-moqt/
+  STIVERS:
+    title: "Universals and cultural variation in turn-taking in conversation"
+    date: 2009-06
+    author:
+    - ins: T. Stivers
+    - ins: N. J. Enfield
+    - ins: P. Brown
+    - ins: C. Englert
+    - ins: M. Hayashi
+    - ins: T. Heinemann
+    - ins: G. Hoymann
+    - ins: F. Rossano
+    - ins: J. P. de Ruiter
+    - ins: K.-E. Yoon
+    - ins: S. C. Levinson
+    seriesinfo:
+      DOI: 10.1073/pnas.0903616106
+    refcontent: "Proceedings of the National Academy of Sciences, vol. 106, no. 26, pp. 10587-10592"
   SD-AGENT:
     title: "SD Agent: Selective Disclosure for Agent Discovery and Identity Management"
     date: 2026-02
@@ -197,7 +215,7 @@ the agent to stop. Voice and video run alongside chat, streaming model
 output, and tool calls. Several agents and people work on the same
 task, and the task can outlast a single connection or network. In
 natural spoken conversation, people take turns within a few hundred
-milliseconds, so an interruption has to take effect ahead of output
+milliseconds {{STIVERS}}, so an interruption has to take effect ahead of output
 that is already queued. PACE is designed for these dialogs.
 
 PACE addresses the following goals.
@@ -337,67 +355,102 @@ blocks used across these layers. PACE integrates them
 ({{identity-discovery}}, {{authorization}}) but does not define new
 ones.
 
+## Transport Requirements {#transport-requirements}
+
+Live dialogs ({{scope}}) place the following requirements on the
+transport that carries them.
+
+Interruption:
+: Dialog control, such as an interruption or a cancellation, reaches
+  its receiver ahead of content that is already queued. Real-time
+  content that is too late to be useful is dropped instead of being
+  delivered late.
+
+Concurrent flows:
+: Real-time media, chat, streaming model output, tool calls, and bulk
+  transfers share one dialog. Each keeps its own priority and
+  reliability, and none of them delays the others.
+
+Fan-out:
+: One message reaches every participant without the sender sending a
+  copy to each. Participants that join late or reconnect can catch up.
+
+Push delivery:
+: Participants learn of new participants, flows, and dialogs as they
+  appear, without polling.
+
+Continuity:
+: A dialog survives connection migration, network changes,
+  reconnection, and intermediaries.
+
+Scale and control:
+: Dialogs scale through intermediaries across regions, and each
+  intermediary enforces who may send and receive.
+
+Request/response mechanisms might not meet these requirements. When a
+dialog's flows share one ordered connection, a cancellation waits
+behind output that has already been sent, and one lost packet stalls
+every flow. Delivery to several participants, and learning about new
+ones, are left to the application.
+
 ## Why MOQT?
 
-This document specifies a MOQT binding for exchanging dialogs. Live
-dialogs place requirements on their transport that request/response
-mechanisms might not meet. An interruption has to overtake output that
-is already queued. Real-time media has to share a connection with
-chat, model output, tool calls, and bulk transfers without waiting
-behind them. One message has to reach every participant, and the
-dialog has to survive connection and network changes. A binding is
-useful when it supports these, together with reliable delivery of
-lifecycle control and distribution through intermediaries.
+This document specifies a MOQT binding for exchanging dialogs. Media
+over QUIC Transport (MOQT) {{MoQ-TRANSPORT}} is a publish/subscribe
+protocol over QUIC. It meets each requirement in
+{{transport-requirements}} with a transport mechanism, so agent
+protocols do not need to rebuild them.
 
-Media over QUIC Transport (MOQT) {{MoQ-TRANSPORT}} is a
-publish/subscribe protocol over QUIC. It suits long-lived,
-multi-participant dialogs that combine control with real-time media,
-for several reasons:
+Interruption:
+: Publisher priority (per subgroup or datagram) and subscriber priority
+  (per subscription) let dialog control overtake queued
+  lower-priority data. Each track is carried on its own QUIC streams or
+  datagrams, so a loss on one flow does not stall the others. A
+  cancellation therefore reaches the agent ahead of output already in
+  flight. Per-track delivery timeouts let the publisher mark
+  time-sensitive objects: objects that miss the deadline, such as a
+  voice frame whose playout window has passed, are dropped at the relay
+  instead of wasting bandwidth and queue depth.
 
-* Agents publish and subscribe directly; no polling or long-lived HTTP
-  connections, and the relay handles fan-out.
-* Low latency: each track is carried on its own QUIC streams or
-  datagrams, so a loss on one flow does not stall the others, and
-  priorities let control and real-time media overtake queued
-  lower-priority data. An interruption or cancellation reaches the
-  agent ahead of output already in flight, which interactive voice
-  conversation needs.
-* SUBSCRIBE_TRACKS on a namespace prefix delivers all current and
-  future tracks under that prefix, so new dialogs appear without a
-  separate signaling channel.
-* Relays handle NAT traversal, load balancing, and fan-out without
-  requiring direct peer-to-peer connections.
-* A single PUBLISH reaches every subscriber through the relay, so
+Concurrent flows:
+: One MOQT session carries sub-100ms media, sub-second chat, and
+  best-effort bulk transfers at the same time, in one congestion
+  control context. Objects can be delivered over QUIC datagrams, which
+  suit real-time audio and video where lower latency matters more than
+  retransmission, or over QUIC streams, which suit agent chat,
+  operations, and bulk transfers that need ordered, reliable delivery.
+
+Fan-out:
+: A single PUBLISH reaches every subscriber through the relay, so
   multi-agent collaboration does not need application-level broadcast
-  code.
-* Relay caches let late-joining or reconnecting agents catch up
-  without the publisher retransmitting.
-* Publisher priority (per subgroup or datagram) and subscriber
-  priority (per subscription), let audio/video, control
-  messages, and bulk transfers share one MOQT session and
-  congestion control context.
-* Objects can be delivered over QUIC streams or over QUIC datagrams.
-  Datagram delivery suits real-time audio and video frames, where
-  lower latency matters more than retransmission; streams suit agent
-  chat, operations, and bulk transfers that need ordered reliable delivery.
-* Per-track delivery timeouts let the publisher mark time-sensitive
-  objects. Objects that miss the deadline (e.g., a voice frame whose
-  playout window has passed) are dropped at the relay instead of
-  wasting bandwidth and queue depth.
-* The same MOQT session can carry sub-100ms media, sub-second chat,
-  and best-effort bulk transfers at the same time.
-* Relays can be stacked hierarchically to distribute load across
-  regions without an all-to-all connection mesh.
-* QUIC gives connection migration (e.g., WiFi to cellular), stream
-  multiplexing, 0-RTT resumption, and TLS 1.3.
-* Where UDP is blocked, the same MOQT binding can run over QMux
-  {{QMUX}}, which provides QUIC stream and datagram operations over
-  TLS over TCP. Agents keep one protocol stack instead of falling back
-  to a separate one, at the cost of TCP head-of-line blocking and
-  reliable, ordered datagrams.
-* Namespace-level access control maps onto agent authorization
+  code, and the publisher keeps no per-subscriber state. Relay caches
+  let late-joining or reconnecting agents catch up without the
+  publisher retransmitting.
+
+Push delivery:
+: Agents publish and subscribe directly, with no polling and no
+  long-lived HTTP connections. SUBSCRIBE_TRACKS on a namespace prefix
+  delivers all current and future tracks under that prefix, so new
+  dialogs and flows appear without a separate signaling channel.
+
+Continuity:
+: QUIC provides connection migration (for example, from Wi-Fi to
+  cellular) and 0-RTT resumption. A dialog is not tied to a MOQT
+  session: one dialog can span several sessions ({{terminology}}).
+
+Scale and control:
+: Relays handle NAT traversal, load balancing, and fan-out without
+  direct peer-to-peer connections, and they can be stacked
+  hierarchically to spread load across regions without an all-to-all
+  mesh. Namespace-level access control maps onto agent authorization
   scopes: the relay decides who may publish or subscribe to each
-  namespace.
+  namespace. QUIC provides TLS 1.3 for every hop.
+
+Where UDP is blocked, the same MOQT binding can run over QMux
+{{QMUX}}, which provides QUIC stream and datagram operations over TLS
+over TCP. Agents keep one protocol stack instead of falling back to a
+separate one, at the cost of TCP head-of-line blocking and reliable,
+ordered datagrams.
 
 # Agentic Dialog Management {#dialog-management}
 
@@ -1984,7 +2037,7 @@ TODO
 
 The examples below share these conventions:
 
-* `D1` to `D4` stand for dialog-ids (UUIDs). `A`, `B`, and `C` are
+* `D1` to `D5` stand for dialog-ids (UUIDs). `A`, `B`, and `C` are
   agents with agent-ids `agent-a`, `agent-b`, and `agent-c`.
 * Before each example, every agent has completed agent discovery
   ({{agent-discovery}}) and holds SUBSCRIBE_TRACKS on each peer's
@@ -2067,6 +2120,58 @@ dialog `D3`.
 | 1 | First code block |
 | 2 | Second code block |
 | 3 | Result: `{"status":"complete","totalLines":142}` |
+
+## Interrupting a Voice Agent
+
+A user's client, `U` (agent-id `user-u`), talks to a voice agent, `V`
+(agent-id `agent-v`). V answers by voice while a tool call it made to
+`search-tool` is still running. The user cuts in, and V has to stop
+speaking and cancel the tool call at once.
+
+~~~
+U publishes:
+  ("pace","agents","user-u",D5) -- "ctrl"          ACCEPT
+  ("pace","agents","user-u",D5) -- "audio"         microphone
+V publishes:
+  ("pace","agents","agent-v",D5) -- "ctrl"         OPEN, UPDATE
+  ("pace","agents","agent-v",D5) -- "audio"        speech
+  ("pace","agents","agent-v",D5) -- "chat"         reply text
+  ("pace","agents","agent-v",D5,"mcp","tools","search")
+      -- "request"                                 tools/call
+  ("pace","agents","agent-v",D5,"mcp","control")
+      -- "client-to-server"                        cancellation
+search-tool publishes:
+  ("pace","agents","search-tool",D5,"mcp","tools","search")
+      -- "response"                                results
+~~~
+
+1. V opens the dialog with U (OPEN, ACCEPT, UPDATE) and adds
+   search-tool the same way.
+2. V answers the user. It publishes speech on its `audio` track as
+   datagrams at media priority (32-63), with a short
+   OBJECT_DELIVERY_TIMEOUT, and the reply text on `chat` at interactive
+   priority (64-95). Its call to search-tool, Group 3 of the `search`
+   request track, is still running.
+3. The user starts speaking. U publishes microphone audio on its
+   `audio` track, and the relay forwards each frame to V as it
+   arrives. The dialog does not change.
+4. V detects the user's speech and stops producing speech and text. It
+   publishes `notifications/cancelled` for Group 3 on its MCP control
+   track at critical priority (0-15). The cancellation is sent ahead of
+   any `chat` objects V has already queued, and a loss on the audio
+   datagrams does not delay it.
+5. Speech objects that the relay has not delivered within their
+   delivery timeout are dropped at the relay, so the user does not
+   hear the rest of the old answer after cutting in.
+6. search-tool stops and publishes no further objects in Group 3. V
+   listens to the rest of the user's audio and answers in new groups
+   on its `audio` and `chat` tracks.
+
+The dialog, its generation, and the MOQT sessions stay the same
+throughout: an interruption changes the content of a dialog, not the
+dialog. If the dialog's flows shared one ordered connection, the
+cancellation in step 4 would wait behind the output V had already
+sent.
 
 ## Collaborating in a Multi-Party Dialog
 
