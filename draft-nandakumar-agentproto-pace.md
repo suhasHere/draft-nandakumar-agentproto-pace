@@ -572,90 +572,67 @@ fetch of content ({{dialog-recovery}}), and cancellation is CANCEL
 
 PACE defines the following control operations:
 
-| Operation | Sender | Effect |
-|---|---|---|
-| OPEN | Controller | Creates a pending dialog at generation 0 and identifies invitees. |
-| ACCEPT | Invitee | Reports acceptance of an invitation. The controller commits it with UPDATE. |
-| REJECT | Invitee | Reports rejection of an invitation. The controller commits it with UPDATE. |
-| UPDATE | Controller | Replaces the participant set or expiration at the next generation. |
-| JOIN_REQUEST | Prospective participant | Requests admission to an existing dialog. |
-| LEAVE | Participant | Leaves the dialog. The controller records the participant as left. |
-| REVOKE | Controller | Revokes a participant's propagation relationship. |
-| TERMINATE | Controller | Ends the dialog and advances the generation. |
-| CANCEL | Any participant | Asks receivers to stop work started by the sender's earlier input ({{cancellation}}). |
-| CANCEL_ACK | Any participant | Reports the outcome of a CANCEL. |
-| STATE_REQUEST | Participant | Requests the current context after a gap or reconnection. |
-| STATE | Controller | Supplies a complete context snapshot at the current generation. |
-| ERROR | Any participant | Reports a malformed, unsupported, stale, or unauthorized operation. |
+| Operation | Sender | Generation | Effect |
+|---|---|---|---|
+| OPEN | Controller | 0 | Creates a pending dialog and identifies invitees. |
+| ACCEPT | Invitee | Current | Reports acceptance of an invitation. The controller commits it with UPDATE. |
+| REJECT | Invitee | Current | Reports rejection of an invitation. The controller commits it with UPDATE. |
+| UPDATE | Controller | Next | Replaces the participant set or expiration. |
+| JOIN_REQUEST | Prospective participant | Latest known, or 0 | Requests admission to an existing dialog. |
+| LEAVE | Participant | Current | Leaves the dialog. The controller records the participant as left. |
+| REVOKE | Controller | Next | Revokes a participant's propagation relationship. |
+| TERMINATE | Controller | Next | Ends the dialog. |
+| CANCEL | Any participant | Current | Asks receivers to stop work started by the sender's earlier input ({{cancellation}}). |
+| CANCEL_ACK | Any participant | Current | Reports the outcome of a CANCEL. |
+| STATE_REQUEST | Participant | Current | Requests the current context after a gap or reconnection. |
+| STATE | Controller | Current | Supplies a complete context snapshot. |
+| ERROR | Any participant | Current | Reports a malformed, unsupported, stale, or unauthorized operation. |
+{: #table-control-ops title="Control Operations"}
 
-OPEN includes at least one invitee. Each ACCEPT and REJECT references
-the message identifier of the OPEN or UPDATE that carried the
-invitation. JOIN_REQUEST does not add a participant; the controller
-admits the requester by sending UPDATE with the requester's state set
-to `invited`. ACCEPT, REJECT, JOIN_REQUEST, and LEAVE are requests or
-responses and do not modify the context by themselves. The controller
-commits a participant-state change by publishing UPDATE with the
-complete context at the next generation. The dialog becomes `active`
-when the controller publishes such an UPDATE after at least one
-invitee has accepted.
+### Committing Participant Changes
+
+Only the controller changes the dialog context. Other participants
+send requests and responses, and the controller commits the result.
+
+* OPEN includes at least one invitee.
+* An invitee answers with ACCEPT or REJECT, referencing the message
+  identifier of the OPEN or UPDATE that carried the invitation.
+* JOIN_REQUEST does not add a participant. The controller admits the
+  requester by sending UPDATE with the requester's state set to
+  `invited`.
+* ACCEPT, REJECT, JOIN_REQUEST, and LEAVE do not modify the context by
+  themselves. The controller commits each resulting change by
+  publishing UPDATE with the complete context at the next generation.
+* The dialog becomes `active` when the controller publishes such an
+  UPDATE after at least one invitee has accepted.
+
+### Revoking a Participant
 
 REVOKE is controller-authoritative. It carries the complete context at
-the next generation, with the target participant's state set to
-`revoked`, and terminates that participant's propagation relationship.
-A participant or intermediary that receives REVOKE MUST stop forwarding
-the dialog's context to the target and MUST cancel subscriptions that
-it holds only to propagate the dialog to the target.
+the next generation, sets the target participant's state to `revoked`,
+and ends that participant's propagation relationship. A participant or
+intermediary that receives REVOKE:
 
-UPDATE, REVOKE, and TERMINATE carry the next generation and a complete
-context, so a receiver applies the new state without merging partial
-updates. ACCEPT, REJECT, JOIN_REQUEST, LEAVE, STATE_REQUEST, STATE,
-CANCEL, CANCEL_ACK, and ERROR carry the current generation. A prospective participant does
-not yet track the dialog, so its JOIN_REQUEST carries the latest
-generation it knows, or 0, and the controller does not reject a
-JOIN_REQUEST as stale. A receiver MUST reject a controller
-operation whose generation is lower than the latest generation it
-accepted. If it receives a generation greater than the next expected
-one, it MUST send STATE_REQUEST and MUST NOT infer the missing changes.
+* MUST stop forwarding the dialog's context to the target.
+* MUST cancel subscriptions that it holds only to propagate the dialog
+  to the target.
 
-A participant receiving an operation MUST authenticate its sender and
-check authorization using the deployment's mechanisms
-({{authorization}}) before applying it. If authorization fails or
-cannot be determined, the participant MUST reject the operation with
-ERROR, giving `unauthorized` or `authorization-unavailable` as the
-reason, without revealing policy details. A valid state-changing
-operation does not require a separate acknowledgment.
-
-TERMINATE is final. A receiver MUST reject later operations for the
-dialog, except a duplicate TERMINATE or a STATE needed to complete
-synchronization. Expiration has the same effect as TERMINATE and is
-evaluated locally from `expires-at`; it does not create a new
-generation. A controller SHOULD publish TERMINATE before the
-expiration time when it can. Resuming a transport connection does not
-reopen a terminated or expired dialog.
-
-The controller MUST serialize its state-changing operations and MUST
-NOT reuse a generation for different state. Receivers use the message
-identifier and generation to detect duplicates and stale messages.
-Reprocessing a duplicate operation MUST NOT repeat its side effects.
-
-A participant that does not understand the control-message version or
-an operation MUST NOT reinterpret it; it responds with ERROR giving
-`unsupported-version` or `unsupported-operation`.
-
-## Cancellation {#cancellation}
+### Cancellation {#cancellation}
 
 A principal that interrupts an agent, a policy decision, or a failed
 subtask can require work to stop at once. PACE carries cancellation as
-a dialog control operation rather than relying on connection teardown, 
+a dialog control operation rather than relying on connection teardown,
 so it travels on the `ctrl` track at
 critical priority, ahead of queued content ({{data-exchange}}).
 
 CANCEL does not change the dialog context and does not end the dialog.
 Its `scope` member selects the work to stop:
 
-operation:  A single operation the sender started, named in `target`.
+operation:
+: A single operation the sender started, named in `target`.
 
-subtree: All work the receivers carry out in delegated dialogs whose
+subtree:
+: All work the receivers carry out in delegated dialogs whose
   `parent_dialog_ids` include this dialog. A receiver that controls
   such a dialog sends CANCEL with scope `dialog` in it, so cancellation
   propagates down the delegation chain and dependent subtasks do not
@@ -678,6 +655,56 @@ of these outcomes:
 * `completed`: the work had already completed.
 * `irreversible`: the work stopped, but an action it took could not be
   rolled back.
+
+### Generations and Ordering
+
+UPDATE, REVOKE, and TERMINATE carry the next generation and a complete
+context, so a receiver replaces its state as a whole instead of merging
+partial updates. Other operations carry the current generation
+({{table-control-ops}}).
+
+* The controller MUST serialize its state-changing operations and MUST
+  NOT reuse a generation for different state.
+* A receiver MUST reject a controller operation whose generation is
+  lower than the latest generation it accepted.
+* If a receiver sees a generation greater than the next expected one,
+  it MUST send STATE_REQUEST and MUST NOT infer the missing changes.
+* A prospective participant does not yet track the dialog, so its
+  JOIN_REQUEST carries the latest generation it knows, or 0. The
+  controller does not reject a JOIN_REQUEST as stale.
+* Receivers use the message identifier and generation to detect
+  duplicates and stale messages. Reprocessing a duplicate operation
+  MUST NOT repeat its side effects.
+
+### Authorization and Errors
+
+Before applying an operation, a participant MUST authenticate its
+sender and check authorization using the deployment's mechanisms
+({{authorization}}). A valid state-changing operation needs no separate
+acknowledgment.
+
+* If authorization fails or cannot be determined, the participant MUST
+  reject the operation with ERROR, giving `unauthorized` or
+  `authorization-unavailable` as the reason, without revealing policy
+  details.
+* A participant that does not understand the control-message version
+  or an operation MUST NOT reinterpret it. It responds with ERROR,
+  giving `unsupported-version` or `unsupported-operation`.
+
+### Termination and Expiry
+
+TERMINATE is final.
+
+* After TERMINATE, a receiver MUST reject later operations for the
+  dialog, except a duplicate TERMINATE or a STATE needed to complete
+  synchronization.
+* Expiration has the same effect as TERMINATE. Each participant
+  evaluates it locally from `expires-at`, and it does not create a new
+  generation.
+* A controller SHOULD publish TERMINATE before the expiration time when
+  it can.
+* Resuming a transport connection does not reopen a terminated or
+  expired dialog.
 
 ## Propagation and Continuity {#propagation}
 
@@ -1229,6 +1256,129 @@ dialog), it cancels its PUBLISH_NAMESPACE for
 `("pace","agents",{agent-id})`. Relays then send NAMESPACE_DONE to
 agents with matching SUBSCRIBE_NAMESPACE subscriptions.
 
+# Multi-Modal Data Exchange {#data-exchange}
+
+Over the MOQT binding, a dialog can carry several data modalities
+concurrently, each with appropriate quality of service. This content
+is outside the dialog context; a change of modality does not change
+the dialog ({{propagation}}).
+
+## Modality Types
+
+PACE defines the following data modality classes:
+
+| Modality | Latency | Examples | Delivery |
+|----------|---------|----------|----------|
+| Real-time | < 100ms | Voice, video, screen share | Continuous stream |
+| Semi-real-time | < 1s | Chat messages, streaming LLM output | Ordered objects |
+| Non-real-time | Best effort | Tool calls, file transfers, context | Reliable delivery |
+
+These classes correspond to the low-latency loss-tolerant, reliable
+ordered, and high-throughput reliable delivery semantics of
+{{Section 8.1 of ARCH}}.
+
+## Channel Architecture
+
+Each modality maps to dedicated MOQT tracks within the Dialog
+Communication Namespace ({{namespace}}). Different modalities are
+isolated by track name while sharing the dialog context and
+authorization.
+
+## Priority and Quality of Service
+
+MOQT's 0-255 priority scale enables differentiated treatment of messages
+based on urgency and modality. PACE defines the following priority tiers:
+
+| Priority Range | Category | Use |
+|----------------|----------|-----|
+| 0-15 | Critical Control | Dialog control (ctrl track), emergency cancel |
+| 16-31 | Urgent Control | Error notifications, auth revocation |
+| 32-63 | Real-time Media | Voice/video frames |
+| 64-95 | Interactive | Chat messages, streaming LLM tokens |
+| 96-127 | Standard Operations | Tool calls, request/response |
+| 128-159 | Discovery | Capability cards, agent advertisements |
+| 160-191 | Background | Telemetry, non-critical notifications |
+| 192-255 | Bulk Transfer | File transfers, context exchange |
+
+MOQT relays forward Publisher Priority unchanged, so PACE applies
+policy through subscriber priority, which MOQT applies before publisher
+priority. A subscriber sets the subscriber priority of each
+subscription according to its policy for that peer and track, and can
+change it with REQUEST_UPDATE, so a publisher cannot raise the urgency
+of its traffic beyond what its subscribers allow.
+
+## Request/Response Pattern {#request-response}
+
+Request/response interactions use coordinated publish operations.
+Agent A publishes a request object on its own track
+`("pace","agents","agent-a",{sid}) -- "ops/{req-id}"`. Agent B, which
+has subscribed to A's dialog namespace, receives the request, processes
+it, and publishes the response on its own corresponding track
+`("pace","agents","agent-b",{sid}) -- "ops/{req-id}"`. Agent A receives
+the response through its subscription to B's dialog namespace.
+
+For a detailed example of request/response over MOQT tracks, see
+{{MCP-MOQT}} which defines this pattern for MCP tool invocations.
+
+## Streaming Pattern {#streaming}
+
+Long-running operations produce incremental results as MOQT objects
+organized into groups representing execution phases. The server advances
+to a new group at each phase transition (e.g., initialization, progress,
+completion). Multiple objects within a group represent incremental data
+for that phase.
+
+Late-joining subscribers receive the latest complete group from relay
+cache, enabling mid-operation catch-up without replaying the full
+history. For deterministic recovery of a specific range, subscribers
+MAY issue SUBSCRIBE with FILL_PARAMETERS (join fetch) to receive the
+historical range on a fill fetch stream before live objects resume on
+the subscription.
+
+Upon operation completion, the publisher sends PUBLISH_DONE on the
+operation track to signal end-of-stream. Receivers treat PUBLISH_DONE
+as the authoritative completion marker; publishers MUST NOT emit
+further objects on that track after PUBLISH_DONE.
+
+To cancel an in-progress streaming operation, the requester publishes
+CANCEL on its `ctrl` track ({{cancel-over-moqt}}), or the application
+protocol's own cancel message on its request or operation track. The
+publisher then stops the operation and sends PUBLISH_DONE to end the
+stream. REQUEST_UPDATE with
+FORWARD=0 only pauses delivery to that subscriber; it does not cancel
+the operation.
+
+## Real-Time Media Exchange
+
+Audio and video streams use dedicated tracks (`"audio"`, `"video"`)
+with ascending group order and high priority (32-63),
+ensuring media frames preempt lower-priority data under congestion.
+
+# Communication Topologies {#topologies}
+
+PACE supports multiple communication topologies through MOQT's relay
+fan-out:
+
+* Point-to-Point: Two agents publish and subscribe to each other's
+  dialog tracks. Used for tool invocation, task delegation, and
+  bilateral collaboration.
+* Point-to-Multipoint (Fan-Out): One agent publishes; multiple agents
+  subscribe. The relay handles fan-out without the publisher maintaining
+  per-subscriber state. Used for broadcast notifications and shared
+  context distribution.
+* Multi-Party: All participants publish on their own tracks and
+  subscribe to each other's tracks within the same dialog-id. The
+  controller adds a participant with UPDATE; existing participants see
+  the new participant in the context and subscribe to its dialog
+  namespace.
+* Hierarchical Teams: A coordinator creates child PACE dialogs to
+  delegate subtasks. Each level operates as a separate dialog with
+  narrowed authorization scope, and each child's `parent_dialog_ids`
+  links it to the dialogs above it ({{dialog-context}}). Delegation
+  chains ({{identity-discovery}}) maintain an auditable path from the
+  original user authorization, and CANCEL with scope `subtree` stops the
+  work below a level ({{cancellation}}).
+
 # Agent Identity and Discovery {#identity-discovery}
 
 ## Agent Identity Model
@@ -1362,129 +1512,6 @@ All Agent Cards MUST include:
 The card format is protocol-specific. For A2A agents, see
 {{a2a-agent-card}}. Agent Cards MAY use selective disclosure
 {{SD-AGENT}} to reveal only claims necessary for a given interaction.
-
-# Multi-Modal Data Exchange {#data-exchange}
-
-Over the MOQT binding, a dialog can carry several data modalities
-concurrently, each with appropriate quality of service. This content
-is outside the dialog context; a change of modality does not change
-the dialog ({{propagation}}).
-
-## Modality Types
-
-PACE defines the following data modality classes:
-
-| Modality | Latency | Examples | Delivery |
-|----------|---------|----------|----------|
-| Real-time | < 100ms | Voice, video, screen share | Continuous stream |
-| Semi-real-time | < 1s | Chat messages, streaming LLM output | Ordered objects |
-| Non-real-time | Best effort | Tool calls, file transfers, context | Reliable delivery |
-
-These classes correspond to the low-latency loss-tolerant, reliable
-ordered, and high-throughput reliable delivery semantics of
-{{Section 8.1 of ARCH}}.
-
-## Channel Architecture
-
-Each modality maps to dedicated MOQT tracks within the Dialog
-Communication Namespace ({{namespace}}). Different modalities are
-isolated by track name while sharing the dialog context and
-authorization.
-
-## Priority and Quality of Service
-
-MOQT's 0-255 priority scale enables differentiated treatment of messages
-based on urgency and modality. PACE defines the following priority tiers:
-
-| Priority Range | Category | Use |
-|----------------|----------|-----|
-| 0-15 | Critical Control | Dialog control (ctrl track), emergency cancel |
-| 16-31 | Urgent Control | Error notifications, auth revocation |
-| 32-63 | Real-time Media | Voice/video frames |
-| 64-95 | Interactive | Chat messages, streaming LLM tokens |
-| 96-127 | Standard Operations | Tool calls, request/response |
-| 128-159 | Discovery | Capability cards, agent advertisements |
-| 160-191 | Background | Telemetry, non-critical notifications |
-| 192-255 | Bulk Transfer | File transfers, context exchange |
-
-MOQT relays forward Publisher Priority unchanged, so PACE applies
-policy through subscriber priority, which MOQT applies before publisher
-priority. A subscriber sets the subscriber priority of each
-subscription according to its policy for that peer and track, and can
-change it with REQUEST_UPDATE, so a publisher cannot raise the urgency
-of its traffic beyond what its subscribers allow.
-
-## Request/Response Pattern {#request-response}
-
-Request/response interactions use coordinated publish operations.
-Agent A publishes a request object on its own track
-`("pace","agents","agent-a",{sid}) -- "ops/{req-id}"`. Agent B, which
-has subscribed to A's dialog namespace, receives the request, processes
-it, and publishes the response on its own corresponding track
-`("pace","agents","agent-b",{sid}) -- "ops/{req-id}"`. Agent A receives
-the response through its subscription to B's dialog namespace.
-
-For a detailed example of request/response over MOQT tracks, see
-{{MCP-MOQT}} which defines this pattern for MCP tool invocations.
-
-## Streaming Pattern {#streaming}
-
-Long-running operations produce incremental results as MOQT objects
-organized into groups representing execution phases. The server advances
-to a new group at each phase transition (e.g., initialization, progress,
-completion). Multiple objects within a group represent incremental data
-for that phase.
-
-Late-joining subscribers receive the latest complete group from relay
-cache, enabling mid-operation catch-up without replaying the full
-history. For deterministic recovery of a specific range, subscribers
-MAY issue SUBSCRIBE with FILL_PARAMETERS (join fetch) to receive the
-historical range on a fill fetch stream before live objects resume on
-the subscription.
-
-Upon operation completion, the publisher sends PUBLISH_DONE on the
-operation track to signal end-of-stream. Receivers treat PUBLISH_DONE
-as the authoritative completion marker; publishers MUST NOT emit
-further objects on that track after PUBLISH_DONE.
-
-To cancel an in-progress streaming operation, the requester publishes
-CANCEL on its `ctrl` track ({{cancel-over-moqt}}), or the application
-protocol's own cancel message on its request or operation track. The
-publisher then stops the operation and sends PUBLISH_DONE to end the
-stream. REQUEST_UPDATE with
-FORWARD=0 only pauses delivery to that subscriber; it does not cancel
-the operation.
-
-## Real-Time Media Exchange
-
-Audio and video streams use dedicated tracks (`"audio"`, `"video"`)
-with ascending group order and high priority (32-63),
-ensuring media frames preempt lower-priority data under congestion.
-
-# Communication Topologies {#topologies}
-
-PACE supports multiple communication topologies through MOQT's relay
-fan-out:
-
-* Point-to-Point: Two agents publish and subscribe to each other's
-  dialog tracks. Used for tool invocation, task delegation, and
-  bilateral collaboration.
-* Point-to-Multipoint (Fan-Out): One agent publishes; multiple agents
-  subscribe. The relay handles fan-out without the publisher maintaining
-  per-subscriber state. Used for broadcast notifications and shared
-  context distribution.
-* Multi-Party: All participants publish on their own tracks and
-  subscribe to each other's tracks within the same dialog-id. The
-  controller adds a participant with UPDATE; existing participants see
-  the new participant in the context and subscribe to its dialog
-  namespace.
-* Hierarchical Teams: A coordinator creates child PACE dialogs to
-  delegate subtasks. Each level operates as a separate dialog with
-  narrowed authorization scope, and each child's `parent_dialog_ids`
-  links it to the dialogs above it ({{dialog-context}}). Delegation
-  chains ({{identity-discovery}}) maintain an auditable path from the
-  original user authorization, and CANCEL with scope `subtree` stops the
-  work below a level ({{cancellation}}).
 
 # Protocol Bindings {#protocol-bindings}
 
@@ -1724,7 +1751,34 @@ object payload ({{message-serialization}}):
 
 ### Identity and Authorization
 
-TODO
+This binding reuses Poppy identity and authorization unchanged. Sign-in,
+token refresh, and client metadata stay on HTTPS as Poppy specifies.
+
+* Identity: The Personal Agent is identified by its Poppy `client_id`,
+  and the person only by the pairwise Poppy User ID. The Company Agent
+  is identified by the Company's validated `poppy.json`.
+* Credentials: The Personal Agent sends its Poppy Session JWT, and its
+  access token when signed in, in the `credentials` member of OPEN
+  ({{control-encoding}}). It sends new ones on its next control message
+  after a refresh or sign-in. The Company Agent validates them as Poppy
+  requires for a conversation request.
+* Ownership: The conversation belongs to the `client_id` and User ID
+  that opened it, as in Poppy. The Company MUST reject control messages
+  from any other client, User, or account, and MUST authorize
+  subscriptions to the conversation's `events` and `deltas` tracks only
+  for that owner.
+* Signing in: A signed-out OPEN carries no access token. When the
+  Company Agent needs account access, it publishes an `authorization`
+  event. The Personal Agent signs in over HTTPS and continues the same
+  dialog with its new credentials. Credentials that fail validation are
+  rejected with ERROR `unauthorized`.
+* Relays: Control messages pass through relays, so the Personal Agent
+  SHOULD use DPoP-bound tokens {{RFC9449}} where the Company supports
+  them.
+
+Editor's note: A Poppy Session JWT is bound to an HTTP method and URL
+(`htm`, `htu`). How these claims apply to a PACE control message is to
+be agreed with the Poppy authors.
 
 ### Priority Mapping
 
@@ -2081,13 +2135,26 @@ and load management:
 
 ## Failure Modes and Recovery
 
-| Failure | Detection | Recovery |
-|---------|-----------|----------|
-| Agent network loss | QUIC idle timeout | Connection migration, or reconnect and STATE_REQUEST |
-| Relay failure | Subscription timeout | Failover to alternate relay, resubscribe, STATE_REQUEST |
-| Participant unreachable | No response before deployment timeout | Controller revokes the participant or lets the dialog expire |
-| Controller unreachable | `ctrl` subscription cannot be restored | Suspend context-dependent actions; dialog stays at last generation |
-| Prolonged outage | `expires-at` or `idle-timeout` reached | Dialog terminated; application state checkpointed |
+When an agent loses its network attachment, the QUIC idle timeout
+detects the loss. The agent recovers through QUIC connection migration,
+or by reconnecting and sending STATE_REQUEST to obtain the current
+context.
+
+When a relay fails, subscribers detect it through a subscription
+timeout. They fail over to an alternate relay, resubscribe to their
+tracks, and send STATE_REQUEST.
+
+When a participant stops responding within the deployment's timeout,
+the controller either revokes that participant or lets the dialog
+expire.
+
+When the controller is unreachable and the `ctrl` subscription cannot
+be restored, participants suspend actions that depend on the dialog
+context. The dialog stays at the last generation they accepted.
+
+When an outage outlasts `expires-at` or `idle-timeout`, the dialog is
+terminated. Applications checkpoint their own state so that work can
+continue in a new dialog.
 
 Recovery mechanics are defined in {{dialog-recovery}} and
 {{propagation}}.
