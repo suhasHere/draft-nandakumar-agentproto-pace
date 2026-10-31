@@ -63,7 +63,10 @@ informative:
   ARCH: I-D.manyfolks-agentproto-arch
   QMUX: I-D.ietf-quic-qmux
   WIMSE-CREDS: I-D.ietf-wimse-workload-creds
+  RFC6749:
   RFC7519:
+  RFC8693:
+  RFC9635:
   RFC7540:
   RFC9110:
   RFC9297:
@@ -288,9 +291,10 @@ Dialog context:
   maintain a dialog ({{dialog-context}}). The dialog context does not
   include content exchanged with AI models, such as conversation
   memory, retrieved documents, prompts, or media payloads. It
-  corresponds to the meta-data of the {{ARCH}} dialog context, the
-  {{ARCH}} log is the sequence of objects on the dialog's content
-  tracks, each identified by its MOQT Location.
+  corresponds to the meta-data of the {{ARCH}} dialog context. The
+  {{ARCH}} log is the dialog's content, which a binding carries; in the
+  MOQT binding, it is the sequence of objects on the dialog's content
+  tracks ({{track-organization}}).
 
 Dialog identifier (dialog-id):
 : A UUID that names a dialog for its whole lifetime.
@@ -456,22 +460,22 @@ in {{moqt-binding}}.
 
 A dialog context contains the following fields:
 
-* dialog-id: A UUID version 4 {{RFC9562}}. The controller generates it
+* `dialog_id`: A UUID version 4 {{RFC9562}}. The controller generates it
   when opening the dialog. It remains unchanged for the lifetime of the
   dialog, including when the dialog crosses an intermediary, changes
   modality, or resumes after a connection loss.
-* generation: An unsigned integer identifying the current controller
+* `generation`: An unsigned integer identifying the current controller
   state. The initial generation is 0. The controller increments it by
   one for each committed change to the dialog context, including a
   change in a participant's state.
-* state: One of `pending`, `active`, or `terminated`.
-* controller-id: The participant identifier of the controller.
-* participants: The set of participant identifiers in the dialog, each
+* `state`: One of `pending`, `active`, or `terminated`.
+* `controller_id`: The participant identifier of the controller.
+* `participants`: The set of participant identifiers in the dialog, each
   with a state: `invited`, `active`, `left`, `rejected`, or `revoked`.
-* expires-at: An optional absolute time in RFC 3339 date-time format.
+* `expires_at`: An optional absolute time in RFC 3339 date-time format.
   When present, participants treat the dialog as terminated at that
   time.
-* parent-dialog-ids: An optional list of dialog-ids, set by the
+* `parent_dialog_ids`: An optional list of dialog-ids, set by the
   controller in OPEN when the dialog is opened to carry out work
   delegated from another dialog. The first entry is the dialog that
   triggered this one, followed by that dialog's own parents, so the list
@@ -511,6 +515,31 @@ These identifiers are correlation values. They MUST NOT be treated as
 credentials or bearer authorization. Knowing a parent dialog-id does
 not grant access to the parent dialog. A participant identifier MUST NOT
 encode personal or task information.
+
+### Dialog Parameters {#dialog-parameters}
+
+Dialog parameters are negotiated in the `parameters` member of OPEN,
+ACCEPT, UPDATE, and JOIN_REQUEST ({{control-encoding}}). They describe
+how the dialog is conducted and are not part of the dialog context:
+
+* `dialog_type`: Short-lived (bounded duration) or long-lived
+  (indefinite)
+* `idle_timeout`: Maximum idle duration before the controller
+  terminates the dialog
+* `max_participants`: Maximum number of participants in the dialog
+* `supported_modalities`: Data modalities the participant can handle
+* `supported_protocols`: Application protocols offered (A2A, MCP, etc.)
+* `content_encoding`: Compression applied to content payloads (for
+  example, `gzip`); absent means none ({{message-serialization}})
+
+### Dialog Lifetime {#dialog-lifetime}
+
+Short-lived dialogs carry an `expires_at` in the dialog context and end
+when it passes. Long-lived dialogs omit `expires_at` and continue
+across idle periods and interruptions until the controller terminates
+them. When `idle_timeout` is set and the dialog has been idle for that
+long, with no content or control sent by any participant, the
+controller SHOULD publish TERMINATE.
 
 ## Lifecycle and Control Operations {#lifecycle}
 
@@ -564,19 +593,19 @@ lets an agent that is not the controller end a two-party dialog.
 The control operations below cover the lifecycle functions of
 {{Section 6.1.2 of ARCH}}. Initiation is OPEN, and termination is
 TERMINATE, expiry, or a LEAVE that ends a two-party dialog. Suspension
-needs no operation, a dialog persists through idle periods with no
-MOQT session, and REQUEST_UPDATE pauses individual tracks
-({{dialog-recovery}}). Resumption is STATE_REQUEST together with a join
-fetch of content ({{dialog-recovery}}), and cancellation is CANCEL
-({{cancellation}}).
+needs no operation: a dialog persists through idle periods with no
+transport connection, and a binding can pause individual flows.
+Resumption is STATE_REQUEST together with the binding's recovery of
+missed content ({{dialog-recovery}} for MOQT), and cancellation is
+CANCEL ({{cancellation}}).
 
 PACE defines the following control operations:
 
 | Operation | Sender | Generation | Effect |
 |---|---|---|---|
 | OPEN | Controller | 0 | Creates a pending dialog and identifies invitees. |
-| ACCEPT | Invitee | Current | Reports acceptance of an invitation. The controller commits it with UPDATE. |
-| REJECT | Invitee | Current | Reports rejection of an invitation. The controller commits it with UPDATE. |
+| ACCEPT | Participant or invitee | Current | Accepts an invitation or a parameter proposal. |
+| REJECT | Participant or invitee | Current | Rejects an invitation or a parameter proposal. |
 | UPDATE | Controller | Next | Replaces the participant set or expiration. |
 | JOIN_REQUEST | Prospective participant | Latest known, or 0 | Requests admission to an existing dialog. |
 | LEAVE | Participant | Current | Leaves the dialog. The controller records the participant as left. |
@@ -586,7 +615,7 @@ PACE defines the following control operations:
 | CANCEL_ACK | Any participant | Current | Reports the outcome of a CANCEL. |
 | STATE_REQUEST | Participant | Current | Requests the current context after a gap or reconnection. |
 | STATE | Controller | Current | Supplies a complete context snapshot. |
-| ERROR | Any participant | Current | Reports a malformed, unsupported, stale, or unauthorized operation. |
+| ERROR | Any participant | Current | Reports that an operation was not applied, and why. |
 {: #table-control-ops title="Control Operations"}
 
 ### Committing Participant Changes
@@ -595,11 +624,16 @@ Only the controller changes the dialog context. Other participants
 send requests and responses, and the controller commits the result.
 
 * OPEN includes at least one invitee.
-* An invitee answers with ACCEPT or REJECT, referencing the message
-  identifier of the OPEN or UPDATE that carried the invitation.
+* ACCEPT and REJECT answer a proposal from the controller, named by
+  `in_reply_to`: an invitation in OPEN or UPDATE, or a parameter
+  change carried in `parameters` on UPDATE. After the controller
+  commits an invitee's answer, its state is `active` or `rejected`. A
+  participant that rejects a parameter change remains in the dialog;
+  the controller then withdraws the change in a later UPDATE or
+  revokes the participant.
 * JOIN_REQUEST does not add a participant. The controller admits the
   requester by sending UPDATE with the requester's state set to
-  `invited`.
+  `invited`, or refuses it with ERROR `policy-rejected`.
 * ACCEPT, REJECT, JOIN_REQUEST, and LEAVE do not modify the context by
   themselves. The controller commits each resulting change by
   publishing UPDATE with the complete context at the next generation.
@@ -622,8 +656,8 @@ intermediary that receives REVOKE:
 A principal that interrupts an agent, a policy decision, or a failed
 subtask can require work to stop at once. PACE carries cancellation as
 a dialog control operation rather than relying on connection teardown,
-so it travels on the `ctrl` track at
-critical priority, ahead of queued content ({{data-exchange}}).
+so a binding can deliver it ahead of queued content. The MOQT binding
+sends it on the `ctrl` track at critical priority ({{cancel-over-moqt}}).
 
 CANCEL does not change the dialog context and does not end the dialog.
 Its `scope` member selects the work to stop:
@@ -656,7 +690,7 @@ of these outcomes:
 * `irreversible`: the work stopped, but an action it took could not be
   rolled back.
 
-### Generations and Ordering
+### Generations and Ordering {#generations}
 
 UPDATE, REVOKE, and TERMINATE carry the next generation and a complete
 context, so a receiver replaces its state as a whole instead of merging
@@ -666,7 +700,8 @@ partial updates. Other operations carry the current generation
 * The controller MUST serialize its state-changing operations and MUST
   NOT reuse a generation for different state.
 * A receiver MUST reject a controller operation whose generation is
-  lower than the latest generation it accepted.
+  lower than the latest generation it accepted, with ERROR
+  `stale-generation`.
 * If a receiver sees a generation greater than the next expected one,
   it MUST send STATE_REQUEST and MUST NOT infer the missing changes.
 * A prospective participant does not yet track the dialog, so its
@@ -681,8 +716,11 @@ partial updates. Other operations carry the current generation
 Before applying an operation, a participant MUST authenticate its
 sender and check authorization using the deployment's mechanisms
 ({{authorization}}). A valid state-changing operation needs no separate
-acknowledgment.
+acknowledgment. An ERROR names the rejected message in `in_reply_to`
+and gives one of the reasons below or in the rules above.
 
+* A message that cannot be parsed, or that lacks a required member
+  ({{control-encoding}}), is rejected with ERROR `malformed`.
 * If authorization fails or cannot be determined, the participant MUST
   reject the operation with ERROR, giving `unauthorized` or
   `authorization-unavailable` as the reason, without revealing policy
@@ -699,7 +737,7 @@ TERMINATE is final.
   dialog, except a duplicate TERMINATE or a STATE needed to complete
   synchronization.
 * Expiration has the same effect as TERMINATE. Each participant
-  evaluates it locally from `expires-at`, and it does not create a new
+  evaluates it locally from `expires_at`, and it does not create a new
   generation.
 * A controller SHOULD publish TERMINATE before the expiration time when
   it can.
@@ -731,9 +769,9 @@ TERMINATE is final.
   not imply that any application operation was delivered or completed,
   or that it is safe to retry.
 * Unreachability: If the controller is unreachable, participants MUST
-  suspend actions that depend on an unconfirmed context change. The
-  dialog remains at its last committed generation until the controller
-  is reachable again or the dialog expires. Participants MUST NOT create
+  suspend actions that depend on an unconfirmed context change. Each
+  participant remains at the last generation it accepted until the
+  controller is reachable again or the dialog expires. Participants MUST NOT create
   a replacement dialog solely because a path or intermediary failed. If
   an invitee or participant is unreachable, the controller MAY revoke it
   or let the dialog expire, according to deployment policy.
@@ -755,7 +793,8 @@ Control messages also carry the following type-specific members:
 * `context`: The complete dialog context, encoded as the JSON object
   defined in {{dialog-context}}.
 * `in_reply_to`: The `message_id` of the OPEN or UPDATE being accepted
-  or rejected, or of the CANCEL being acknowledged.
+  or rejected, of the CANCEL being acknowledged, or of the message an
+  ERROR rejects.
 * `target_id`: The participant identifier whose propagation relationship
   is revoked.
 * `scope`: The cancellation scope: `operation`, `subtree`, or `dialog`
@@ -767,8 +806,8 @@ Control messages also carry the following type-specific members:
   accepted from the controller, or -1 if it has accepted none.
 * `reason`: One of `malformed`, `unsupported-version`,
   `unsupported-operation`, `stale-generation`, `unauthorized`,
-  `authorization-unavailable`, `policy-rejected`, or `timeout`. These
-  distinguish validation, authorization, policy, and timeout failures
+  `authorization-unavailable`, or `policy-rejected`. These
+  distinguish validation, authorization, and policy failures
   from transport failures, which MOQT reports separately ({{Section
   6.1.5 of ARCH}}).
 
@@ -788,7 +827,7 @@ Each type requires the members listed below:
 | STATE | `context` |
 | CANCEL | `scope`; `target` when `scope` is `operation` |
 | CANCEL_ACK | `in_reply_to`, `outcome` |
-| ERROR | `reason` |
+| ERROR | `in_reply_to`, `reason` |
 
 For OPEN, `context` has generation 0 and state `pending`, and carries
 `parent_dialog_ids` when the dialog is delegated. For UPDATE,
@@ -806,7 +845,7 @@ context:
   application protocols ({{dialog-parameters}}).
 * `credentials`: On any message, an identity assertion or
   authorization proof in a format selected by the deployment
-  ({{identity-formats}}, {{authz-building-blocks}}). A participant
+  ({{identity-formats}}). A participant
   refreshes its credentials before they expire by including new ones
   on a later message.
 
@@ -938,7 +977,7 @@ A controller advertises a dialog that others may join by publishing a
 descriptor track under its `dialogs` namespace, with the dialog-id as
 the track name. Each object on a descriptor track contains:
 
-* `dialog-id` — The dialog identifier
+* `dialog_id` — The dialog identifier
 * `controller` — The controller's agent-id
 * `description` — Human-readable purpose of the dialog
 * `participants` — List of agent-ids currently in the dialog
@@ -1037,7 +1076,7 @@ tracks, and the protocol's native message on binding tracks. The
 track namespace identifies the protocol, and MOQT carries the length.
 
 Payloads are uncompressed unless the participants agree on a
-`content-encoding` dialog parameter ({{dialog-parameters}}). It
+`content_encoding` dialog parameter ({{dialog-parameters}}). It
 applies to binding tracks only, never to `ctrl` or join tracks.
 
 ## Dialog Operations over MOQT {#dialog-over-moqt}
@@ -1103,23 +1142,6 @@ participants in OPEN or a later UPDATE, and each invitee responds on
 its own `ctrl` track. A participant that discovers a dialog
 ({{dialog-discovery}}) asks to join with JOIN_REQUEST.
 
-#### Dialog Parameters {#dialog-parameters}
-
-Dialog parameters are negotiated in the `parameters` member of OPEN,
-ACCEPT, UPDATE, and JOIN_REQUEST. They describe how the dialog is
-conducted over this binding and are not part of the dialog context:
-
-* `dialog-type`: Short-lived (bounded duration) or long-lived
-  (indefinite)
-* `idle-timeout`: Maximum idle duration before the controller
-  terminates the dialog
-* `max-participants`: Maximum number of participants in the dialog
-* `supported-modalities`: Data modalities the participant can handle
-* `supported-protocols`: Application protocols offered (A2A, MCP, etc.)
-* `content-encoding`: Compression applied to object payloads on the
-  dialog's protocol tracks (for example, `gzip`); absent means none
-  ({{message-serialization}})
-
 #### MOQT Setup Extensions {#moqt-setup-extensions}
 
 MOQT Setup Options are exchanged hop by hop.
@@ -1132,13 +1154,10 @@ directly connected peer learn that the endpoint implements PACE:
 
 The `version` member of each control message remains authoritative.
 
-### Dialog Lifetime
+### Idle Detection
 
-Short-lived dialogs carry an `expires-at` in the dialog context and end
-when it passes. Long-lived dialogs omit `expires-at` and continue
-across idle periods and interruptions until the controller terminates
-them. When `idle-timeout` is set and no participant publishes on any
-dialog track for that long, the controller SHOULD publish TERMINATE.
+In this binding, a dialog is idle ({{dialog-lifetime}}) while no
+participant publishes an object on any of its tracks.
 
 ### Updating a Dialog
 
@@ -1147,8 +1166,7 @@ publishing UPDATE on its `ctrl` track with the complete context at the
 next generation. Participants request changes with JOIN_REQUEST or
 LEAVE; only the controller commits them. Parameter changes, such as
 adding a modality, are proposed in `parameters` on UPDATE, and each
-participant reports its acceptance in a later ACCEPT that references
-the UPDATE.
+participant answers with ACCEPT or REJECT ({{lifecycle}}).
 
 Participants MAY use MOQT's REQUEST_UPDATE message {{MoQ-TRANSPORT}}
 to change per-subscription parameters, such as pausing delivery with
@@ -1171,13 +1189,15 @@ PACE recovers from network and intermediary failures in several ways:
   agent can pick up what it missed without the peer retransmitting.
   Relays are not required to cache, and they never become the
   authoritative source of the dialog context.
-* Dialog Resumption: After losing its MOQT session, an agent reconnects
+* Dialog Resumption: After losing its MOQT session, which it detects
+  through the QUIC idle timeout or a subscription timeout, an agent
+  reconnects
   (to the same relay or an alternate one), re-issues PUBLISH_NAMESPACE
   and SUBSCRIBE_TRACKS on its agent prefix, resubscribes to the
   controller's `ctrl` track, and sends STATE_REQUEST with its last
   accepted generation. It applies the controller's STATE only after
   authenticating the controller and checking that the generation is not
-  older than its last accepted one ({{propagation}}). A join fetch from
+  older than its last accepted one ({{generations}}). A join fetch from
   the last Location it received then shows which content was published
   while it was away, so it can decide whether to resend its own input.
 * Join Fetch for Mid-Dialog Catch-Up: An agent joining a dialog in
@@ -1194,10 +1214,6 @@ PACE recovers from network and intermediary failures in several ways:
   deterministically, for example replaying a task's output history,
   agents use FETCH with explicit Start and End Locations. The publisher
   confirms the actual End Location in FETCH_OK.
-* State Checkpointing: Agents SHOULD publish application state
-  checkpoints periodically on a dedicated track so they can recover
-  after a relay failure. On recovery, an agent uses a join fetch to
-  retrieve the latest checkpoint and then follows the live stream.
 * Unreachable Controller: If the controller's `ctrl` track cannot be
   resubscribed, participants follow the unreachability rules in
   {{propagation}}: they suspend context-dependent actions and do not
@@ -1271,50 +1287,61 @@ PACE defines the following data modality classes:
 |----------|---------|----------|----------|
 | Real-time | < 100ms | Voice, video, screen share | Continuous stream |
 | Semi-real-time | < 1s | Chat messages, streaming LLM output | Ordered objects |
-| Non-real-time | Best effort | Tool calls, file transfers, context | Reliable delivery |
+| Non-real-time | Best effort | Tool calls, file transfers, documents | Reliable delivery |
 
 These classes correspond to the low-latency loss-tolerant, reliable
 ordered, and high-throughput reliable delivery semantics of
 {{Section 8.1 of ARCH}}.
 
-## Channel Architecture
+## Channel Architecture {#channels}
 
 Each modality maps to dedicated MOQT tracks within the Dialog
 Communication Namespace ({{namespace}}). Different modalities are
 isolated by track name while sharing the dialog context and
 authorization.
 
+Within a track, a MOQT group is a synchronization point. The objects
+in a group carry what belongs together at that point, such as one
+message, one request and its incremental results, or one phase of an
+operation, and relays carry them together. A publisher starts a new
+group at each point where a receiver can begin consuming the track
+without earlier objects, so a subscriber that joins or recovers starts
+at a group boundary ({{dialog-recovery}}).
+
 ## Priority and Quality of Service
 
 MOQT's 0-255 priority scale enables differentiated treatment of messages
-based on urgency and modality. PACE defines the following priority tiers:
+based on urgency and modality. PACE defines the following tiers of
+subscriber priority:
 
 | Priority Range | Category | Use |
 |----------------|----------|-----|
-| 0-15 | Critical Control | Dialog control (ctrl track), emergency cancel |
-| 16-31 | Urgent Control | Error notifications, auth revocation |
+| 0-15 | Dialog Control | All control messages on the `ctrl` track, including CANCEL, ERROR, and REVOKE |
+| 16-31 | Urgent Signals | Application signals that must preempt content, such as a request for a human |
 | 32-63 | Real-time Media | Voice/video frames |
 | 64-95 | Interactive | Chat messages, streaming LLM tokens |
 | 96-127 | Standard Operations | Tool calls, request/response |
 | 128-159 | Discovery | Capability cards, agent advertisements |
 | 160-191 | Background | Telemetry, non-critical notifications |
-| 192-255 | Bulk Transfer | File transfers, context exchange |
+| 192-255 | Bulk Transfer | File transfers, documents |
 
 MOQT relays forward Publisher Priority unchanged, so PACE applies
 policy through subscriber priority, which MOQT applies before publisher
 priority. A subscriber sets the subscriber priority of each
 subscription according to its policy for that peer and track, and can
 change it with REQUEST_UPDATE, so a publisher cannot raise the urgency
-of its traffic beyond what its subscribers allow.
+of its traffic beyond what its subscribers allow. A subscriber MUST
+subscribe to a `ctrl` track with a subscriber priority in the Dialog
+Control tier.
 
 ## Request/Response Pattern {#request-response}
 
 Request/response interactions use coordinated publish operations.
 Agent A publishes a request object on its own track
-`("pace","agents","agent-a",{sid}) -- "ops/{req-id}"`. Agent B, which
+`("pace","agents","agent-a",{dialog-id}) -- "ops/{req-id}"`. Agent B, which
 has subscribed to A's dialog namespace, receives the request, processes
 it, and publishes the response on its own corresponding track
-`("pace","agents","agent-b",{sid}) -- "ops/{req-id}"`. Agent A receives
+`("pace","agents","agent-b",{dialog-id}) -- "ops/{req-id}"`. Agent A receives
 the response through its subscription to B's dialog namespace.
 
 For a detailed example of request/response over MOQT tracks, see
@@ -1322,18 +1349,14 @@ For a detailed example of request/response over MOQT tracks, see
 
 ## Streaming Pattern {#streaming}
 
-Long-running operations produce incremental results as MOQT objects
-organized into groups representing execution phases. The server advances
-to a new group at each phase transition (e.g., initialization, progress,
-completion). Multiple objects within a group represent incremental data
-for that phase.
+Long-running operations produce incremental results as MOQT objects.
+The publisher starts a new group at each synchronization point
+({{channels}}), such as a phase transition (initialization, progress,
+completion), and the objects in a group carry the incremental data for
+that phase.
 
-Late-joining subscribers receive the latest complete group from relay
-cache, enabling mid-operation catch-up without replaying the full
-history. For deterministic recovery of a specific range, subscribers
-MAY issue SUBSCRIBE with FILL_PARAMETERS (join fetch) to receive the
-historical range on a fill fetch stream before live objects resume on
-the subscription.
+Late-joining subscribers catch up mid-operation with a join fetch, and
+retrieve a specific range with a bounded fetch ({{dialog-recovery}}).
 
 Upon operation completion, the publisher sends PUBLISH_DONE on the
 operation track to signal end-of-stream. Receivers treat PUBLISH_DONE
@@ -1375,7 +1398,7 @@ fan-out:
   delegate subtasks. Each level operates as a separate dialog with
   narrowed authorization scope, and each child's `parent_dialog_ids`
   links it to the dialogs above it ({{dialog-context}}). Delegation
-  chains ({{identity-discovery}}) maintain an auditable path from the
+  chains ({{delegation}}) maintain an auditable path from the
   original user authorization, and CANCEL with scope `subtree` stops the
   work below a level ({{cancellation}}).
 
@@ -1389,52 +1412,51 @@ agent without affecting the user, scope an agent to a subset of what
 the user is allowed to do, and audit what the agent did on its own
 versus what the user initiated.
 
-PACE does not define a new identity token format. It defines the
-claim set the agent presents when opening or joining a dialog and how that
-claim set rides over MOQT; the token format and the trust framework
-are chosen by the deployment.
+PACE does not define a new identity token format or claim set. The
+credential an agent presents in the `credentials` member of the
+control message it uses to open, accept, or join a dialog
+({{control-encoding}}) identifies:
 
-### Agent Identity Claim Set
+* the agent, by an identifier that matches its participant identifier
+  in the dialog;
+* the user, workload, or organization the agent acts for; and
+* when the agent acts for another agent, the delegation chain
+  ({{delegation}}).
 
-Each agent presents a signed identity assertion in the `credentials`
-member of the control message it uses to open, accept, or join a
-dialog ({{control-encoding}}). The assertion carries at least the following claims:
+In JWT-based formats, these map to the registered claims `sub`, `iss`,
+`iat`, and `exp` {{RFC7519}} and to the `act` (actor) claim
+{{RFC8693}} for delegation. Other formats carry the equivalent
+information in their own fields. The token format and the trust
+framework are chosen by the deployment.
 
-| Claim | Description |
-|-------|-------------|
-| `agent-id` | Globally unique agent identifier (UUID) |
-| `issuer` | Identity provider that issued the assertion |
-| `subject` | User, workload, or organization the agent represents |
-| `capabilities` | Agent capability descriptors |
-| `scopes` | Authorized operation scopes (see {{authorization}}) |
-| `issued-at` | Assertion issuance timestamp |
-| `expires-at` | Assertion expiration timestamp |
-| `delegation-chain` | Parent agent references (see {{delegation}}) |
+### Credential Mechanisms {#identity-formats}
 
-### Identity Formats {#identity-formats}
+Agents present credentials using existing mechanisms. The mechanism in
+use is advertised in the Agent Card ({{agent-card}}) and indicated in
+the `credentials` member of control messages; it is not negotiated in
+MOQT SETUP, which is hop by hop ({{moqt-setup-extensions}}).
 
-The claim set MAY be encoded in any of the formats below. The format
-in use is advertised in the Agent Card ({{agent-card}}) and indicated
-in the `credentials` member of control messages; it is not negotiated
-in MOQT SETUP, which is hop by hop ({{moqt-setup-extensions}}).
+| Mechanism | Identity | Authorization | Reference |
+|-----------|----------|---------------|-----------|
+| JWT | Agent and principal claims | Scope claims | {{RFC7519}} |
+| SD-JWT | Selectively disclosed claims | Selectively disclosed scope claims | {{SD-AGENT}} |
+| OAuth 2.0 access token (JWT or opaque) | Token claims | Delegated user authorization | {{RFC6749}} |
+| GNAP | | Fine-grained, continuous grants | {{RFC9635}} |
+| WIMSE workload credentials | Workload identity | With deployment policy | {{WIMSE-CREDS}} |
+| mTLS client certificate | Infrastructure-anchored identity | With deployment policy | {{RFC8446}} |
+| Common Access Token (CAT) | | Relay-level namespace authorization | {{MoQ-C4M}} |
 
-| Format | Typical use | Reference |
-|--------|-------------|-----------|
-| JWT | Delegated user context, OAuth2 ecosystems | {{RFC7519}} |
-| SD-JWT | Selective disclosure of claims | {{SD-AGENT}} |
-| OAuth 2.0 access token (JWT or opaque) | Reuse of existing user authorization | |
-| Workload identity assertion | Agents running as workloads | {{WIMSE-CREDS}} |
-| mTLS client certificate | Infrastructure-anchored agent identity | {{RFC8446}} |
-| Common Access Token (CAT) | MOQT-aligned relay authorization | {{MoQ-C4M}} |
-
-A deployment profile MUST pick at least one supported format.
-Receivers MUST verify the assertion's signature, issuer, and
-expiration before acting on its claims.
+A deployment profile MUST pick at least one mechanism for identity and
+one for authorization; one mechanism can provide both. Receivers MUST
+verify a credential's signature, issuer, and expiration before acting
+on its claims, and validate authorization using the rules of the
+mechanism in use.
 
 ### Delegation Chains {#delegation}
 
-When an agent acts on behalf of another agent, the identity assertion
-carries a `delegation-chain` tracing the authorization path (for
+When an agent acts on behalf of another agent, its credential carries
+the delegation chain, such as nested `act` claims {{RFC8693}}, tracing
+the authorization path (for
 example, User → Coordinator → Researcher → Tool). Each entry names
 the granter, the agent being granted, and the scope granted at that
 hop. The receiver walks the chain and MUST reject it if any hop
@@ -1443,8 +1465,9 @@ broadens scope relative to its granter (see {{authorization}}).
 ### Selective Disclosure {#selective-disclosure}
 
 Agents cross trust boundaries where different peers need different
-subsets of claims. A tool-side peer may only need `agent-id` and
-`scopes`; it does not need the full `delegation-chain` or `subject`.
+subsets of claims. A tool-side peer may need only the agent identifier
+and its authorization; it does not need the full delegation chain or
+the principal.
 Agents SHOULD support selective disclosure so they reveal only what
 each peer requires.
 
@@ -1553,7 +1576,7 @@ the full context sends STATE_REQUEST.
 | Protocol | Carried in | Keep distinct from |
 |---|---|---|
 | MCP | `_meta` | MCP session and JSON-RPC request IDs |
-| Poppy | Not needed: the conversation ID is the dialog-id ({{poppy-binding}}) | |
+| Poppy | Track namespace ({{poppy-binding}}) | Conversation ID |
 | AutoGen | Message `metadata` | Conversation ID |
 | A2A | Message `metadata` | `contextId`, `taskId` |
 
@@ -1577,22 +1600,23 @@ A binding specifies:
 * Priority mapping: how message types map to PACE priority tiers
   ({{data-exchange}}).
 * Identity and authorization: how the protocol's own identity and
-  authorization constructs (if any) relate to the identity formats
-  ({{identity-formats}}) and authorization options
-  ({{authz-building-blocks}}) in this document.
+  authorization constructs (if any) relate to the credential
+  mechanisms ({{identity-formats}}) in this document.
 
 Protocols use distinct protocol namespace fields within PACE dialogs.
 In the tables of this section, a pattern such as
 `("a2a", "task") -- {task-id}` gives the namespace fields that follow
 `("pace", "agents", {agent-id}, {dialog-id})`, then the track name.
 
+In the examples, D is the dialog-id.
+
 | Protocol | Protocol Fields | Example Full Track Name |
 |----------|--------------|-------------------|
-| MCP | `"mcp"` | `("pace","agents","fs-server","s1","mcp","tools","read") -- "response"` |
-| Poppy | `"poppy"` | `("pace","agents","acme","s1","poppy","conversation") -- "events"` |
-| AutoGen | `"autogen"` | `("pace","agents","rt1","s1","autogen","message") -- "conv1"` |
-| A2A | `"a2a"` | `("pace","agents","agent-a","s1","a2a","task") -- "t1"` |
-| Generic | `"ext", {proto}` | `("pace","agents","agent-a","s1","ext","myproto","rpc") -- "call"` |
+| MCP | `"mcp"` | `("pace","agents","fs-server",D,"mcp","tools","read") -- "response"` |
+| Poppy | `"poppy"` | `("pace","agents","acme",D,"poppy","conversation") -- "events"` |
+| AutoGen | `"autogen"` | `("pace","agents","rt1",D,"autogen","message") -- "conv1"` |
+| A2A | `"a2a"` | `("pace","agents","agent-a",D,"a2a","task") -- "t1"` |
+| Generic | `"ext", {proto}` | `("pace","agents","agent-a",D,"ext","myproto","rpc") -- "call"` |
 
 ## MCP Binding {#mcp-binding}
 
@@ -1610,22 +1634,22 @@ Tracks:    {track-name}
 The complete MCP over MOQT specification, covering track structure,
 operation mapping, message serialization, Agent Skills, and relay
 support, is defined in {{MCP-MOQT}}. PACE adopts its track semantics.
-The mapping is mechanical: the leading `(mcp, {mcp-dialog-id})` fields of
+The mapping is mechanical: the leading `(mcp, {session-id})` fields of
 an MCP over MOQT namespace are replaced by `("pace", "agents",
 {agent-id}, {dialog-id}, "mcp")`, and the remaining namespace fields
 and the track name are kept unchanged. For example:
 
 ~~~
 MCP over MOQT:
-  (mcp, {sid}, tools, {tool-name}) -- request
-  (mcp, {sid}, tools, {tool-name}) -- response
-  (mcp, {sid}, resources) -- {resource-uri}
+  (mcp, {session-id}, tools, {tool-name}) -- request
+  (mcp, {session-id}, tools, {tool-name}) -- response
+  (mcp, {session-id}, resources) -- {resource-uri}
 Within PACE:
-  ("pace","agents",{client-id},{sid},"mcp","tools",{tool-name})
+  ("pace","agents",{client-id},{dialog-id},"mcp","tools",{tool-name})
       -- "request"
-  ("pace","agents",{server-id},{sid},"mcp","tools",{tool-name})
+  ("pace","agents",{server-id},{dialog-id},"mcp","tools",{tool-name})
       -- "response"
-  ("pace","agents",{server-id},{sid},"mcp","resources")
+  ("pace","agents",{server-id},{dialog-id},"mcp","resources")
       -- {resource-uri}
 ~~~
 
@@ -1709,7 +1733,7 @@ Personal Agents do not publish an Agent Card or answer agent discovery
 
 | Poppy Conversations | PACE / MOQT |
 |---------------------|-------------|
-| Start a conversation (`POST {endpoint}`) | OPEN / ACCEPT / UPDATE, with the Personal Agent as controller. The PACE dialog-id is the Poppy conversation ID |
+| Start a conversation (`POST {endpoint}`) | OPEN / ACCEPT / UPDATE, with the Personal Agent as controller. The Poppy conversation ID is assigned as in Poppy and is distinct from the dialog-id; one dialog carries one conversation |
 | Send a message (`POST .../messages`) | One object per message, each in a new group, on the Personal Agent's `messages` track |
 | Read events (`GET .../events`, `wait`, SSE) | SUBSCRIBE to the Company Agent's `events` track, normally delivered through SUBSCRIBE_TRACKS on the Company's prefix |
 | Resume from a cursor or `Last-Event-ID` | SUBSCRIBE with FILL_PARAMETERS, or FETCH from the Location after the last event received |
@@ -1784,10 +1808,12 @@ be agreed with the Poppy authors.
 
 | Poppy Message Type | MOQT Priority Range | Description |
 |--------------------|---------------------|-------------|
-| Close, handoff | 16-31 | Conversation control |
+| Handoff | 16-31 | Request for a human |
 | Messages and events | 64-95 | Interactive conversation |
 | `text-delta` | 64-95 | Streaming text |
 | Voice or video after handoff | 32-63 | Real-time media |
+
+Close is TERMINATE and travels on the `ctrl` track ({{lifecycle}}).
 
 ## AutoGen Binding {#autogen-binding}
 
@@ -1843,14 +1869,11 @@ AutoGen's conversation patterns map to MOQT as follows:
 
 ### Priority Mapping
 
-| AutoGen Message Type | MOQT Priority Range |
-|----------------------|---------------------|
-| Termination signals | 0-31 |
-| Human input requests | 32-63 |
-| Agent responses | 64-95 |
-| Function results | 96-127 |
-| State updates | 128-159 |
-| Logging/debug | 160-255 |
+AutoGen messages use the PACE priority tiers ({{data-exchange}}).
+Termination and cancellation are PACE control messages on the `ctrl`
+track. Requests for human input use the Urgent Signals tier, agent
+messages the Interactive tier, function calls and results the Standard
+Operations tier, and logging the Background tier.
 
 ## A2A Binding {#a2a-binding}
 
@@ -1918,16 +1941,12 @@ payload ({{message-serialization}}):
 
 ### Priority Mapping
 
-| A2A Message Type | MOQT Priority Range | Description |
-|------------------|---------------------|-------------|
-| Cancel/Error | 0-31 | Task cancellation, critical errors |
-| SendMessage response | 32-63 | Responses requiring immediate delivery |
-| SendMessage request | 64-95 | Normal request messages |
-| Task status updates | 96-127 | Incremental task state changes |
-| Streaming artifacts | 96-127 | Streaming result data |
-| Discovery (Agent Card) | 128-159 | Agent card exchange |
-| Push notifications | 160-191 | Asynchronous notifications |
-| Background/bulk | 192-255 | Large file transfers, batch ops |
+A2A messages use the PACE priority tiers ({{data-exchange}}).
+Cancellation and errors are PACE control messages on the `ctrl` track.
+SendMessage requests and responses use the Interactive tier, task
+status updates and streaming artifacts the Standard Operations tier,
+Agent Cards the Discovery tier, and push notifications the Background
+tier.
 
 ### Streaming Support
 
@@ -1935,11 +1954,10 @@ A2A streaming operations (SendStreamingMessage, task subscriptions) use
 the streaming pattern defined in {{streaming}}. A2A streaming events map
 to MOQT objects as follows:
 
-* Each streaming response creates a new MOQT group
+* Each streaming response starts a new group, and the publisher
+  starts further groups at execution phase transitions ({{streaming}}).
 * TaskStatusUpdateEvent (state changes) and TaskArtifactUpdateEvent
-  (output data) are individual objects within groups
-* Groups represent execution phases (initialization, progress,
-  completion)
+  (output data) are individual objects within those groups.
 
 ### A2A Agent Card with MOQT Extension {#a2a-agent-card}
 
@@ -2013,46 +2031,17 @@ Messages follow standard JSON-RPC 2.0:
 ### Extension Mechanism
 
 Custom protocols extend this binding by defining additional track
-subcategories, custom message schemas within JSON-RPC params,
-protocol-specific priorities, and custom MOQT extension headers.
-Implementations SHOULD document extensions and MAY register them
-in the IANA PACE Protocol Binding Registry.
+subcategories and message schemas within JSON-RPC params.
 
 # Authorization and Security {#authorization}
 
 ## Authorization Model
 
-Access in PACE is granted through scopes attached to specific
-operations an agent is allowed to perform. The scope syntax is fixed
-by this document; the token format, issuance mechanism, and
-verification policy are not. PACE does not define a new authorization
-protocol.
-
-### Scopes
-
-Scopes have the form `{domain}:{resource}:{action}:{constraints}`.
-They are tied to concrete operations rather than roles, and the
-constraints field carries dynamic limits such as time windows,
-resource caps, or call counts. The same scope syntax is used
-regardless of the token format, so bindings can translate PACE scopes
-into whatever scope representation the underlying token uses.
-
-### Authorization Options {#authz-building-blocks}
-
-Implementations MAY use any of the following, advertised in the Agent
-Card and presented in the `credentials` member of control messages:
-
-| Option | Typical use | Reference |
-|--------|-------------|-----------|
-| OAuth 2.0 / OAuth 2.1 | Delegated user authorization, scope grants | OAuth WG |
-| GNAP | Fine-grained, continuous grant negotiation | RFC 9635 |
-| SD-JWT VC with scope claims | Selective-disclosure authorization proofs | {{SD-AGENT}} |
-| Common Access Token (CAT) | Relay-level namespace authorization | {{MoQ-C4M}} |
-| WIMSE workload identity + policy | Workload-anchored authorization | WIMSE WG |
-| mTLS + authorization policy | Infrastructure-anchored authorization | {{RFC8446}} |
-
-A deployment profile MUST pick at least one. Receivers validate the
-authorization proof using the rules of whichever mechanism is in use.
+Access in PACE is granted through authorization proofs scoped to the
+operations an agent may perform. PACE does not define a new
+authorization protocol or scope syntax. The scope representation,
+token format, issuance mechanism, and verification policy come from
+the mechanism the deployment selects ({{identity-formats}}).
 
 ### Delegated Authorization {#delegated-authz}
 
@@ -2135,29 +2124,10 @@ and load management:
 
 ## Failure Modes and Recovery
 
-When an agent loses its network attachment, the QUIC idle timeout
-detects the loss. The agent recovers through QUIC connection migration,
-or by reconnecting and sending STATE_REQUEST to obtain the current
-context.
-
-When a relay fails, subscribers detect it through a subscription
-timeout. They fail over to an alternate relay, resubscribe to their
-tracks, and send STATE_REQUEST.
-
-When a participant stops responding within the deployment's timeout,
-the controller either revokes that participant or lets the dialog
-expire.
-
-When the controller is unreachable and the `ctrl` subscription cannot
-be restored, participants suspend actions that depend on the dialog
-context. The dialog stays at the last generation they accepted.
-
-When an outage outlasts `expires-at` or `idle-timeout`, the dialog is
-terminated. Applications checkpoint their own state so that work can
-continue in a new dialog.
-
-Recovery mechanics are defined in {{dialog-recovery}} and
-{{propagation}}.
+Agent network loss and relay failure are recovered as described in
+{{dialog-recovery}}. An unreachable participant or controller is
+handled by the rules in {{propagation}}, and a dialog that outlasts its
+expiration or idle timeout ends as described in {{dialog-lifetime}}.
 
 # Security Considerations
 
