@@ -1,9 +1,9 @@
 ---
 title: "PACE: Protocol for Agent Communication Exchange"
-abbrev: "PACE over MOQT"
+abbrev: "PACE"
 category: std
 
-docname: draft-nandakumar-agentproto-moq-pace-latest
+docname: draft-nandakumar-agentproto-pace-latest
 submissiontype: IETF
 number:
 date: 2026-06-28
@@ -24,8 +24,8 @@ venue:
   type: "Working Group"
   mail: "agentproto@ietf.org"
   arch: "https://mailarchive.ietf.org/arch/browse/agentproto/"
-  github: "suhasHere/draft-a2a-moqt-transport"
-  latest: "https://suhasHere.github.io/draft-a2a-moqt-transport/draft-nandakumar-ai-agent-moq-transport.html"
+  github: "suhasHere/draft-nandakumar-agentproto-pace"
+  latest: "https://suhasHere.github.io/draft-nandakumar-agentproto-pace/draft-nandakumar-agentproto-pace.html"
 
 author:
  -
@@ -1579,7 +1579,7 @@ Multi-Party:
   participant in the context and subscribe to its dialog namespace.
 
 Hierarchical Teams:
-: A coordinator creates child PACE dialogs to delegate subtasks. 
+: A coordinator creates child PACE dialogs to delegate subtasks.
   Each level operates as a separate dialog with narrowed authorization scope, and each child's `parent_dialog_ids` links it to the dialogs above it ({{dialog-context}}). Delegation chains ({{identity-discovery}}) maintain an auditable path from the original user authorization, and CANCEL with scope `subtree` stops the work below a level ({{cancellation}}).
 
 # Protocol Bindings {#protocol-bindings}

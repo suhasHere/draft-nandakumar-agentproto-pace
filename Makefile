@@ -1,4 +1,4 @@
-DRAFT = draft-nandakumar-agentproto-moq-pace.md
+DRAFT = draft-nandakumar-agentproto-pace.md
 LIBDIR := ../moq-transport/lib
 include $(LIBDIR)/main.mk
 
