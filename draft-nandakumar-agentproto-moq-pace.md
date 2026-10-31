@@ -202,10 +202,18 @@ This document defines the Protocol for Agent Communication Exchange
   fan-out, prioritization, and multiplexing of dialog control
   alongside text, audio, video, and request/response exchanges.
 
+In terms of the Agent Communication Protocol architecture {{ARCH}}, the
+first part realizes the Agentic Dialog Management block
+({{Section 6.1 of ARCH}}), and the second is the MOQT profile that
+{{Section 9.1 of ARCH}} calls for: a common mapping of request/response
+and streaming patterns onto the publish/subscribe model of MOQT.
+
 The dialog context consists of identifiers and lifecycle state only.
 Content exchanged with AI models, such as conversation memory,
-retrieved documents, or prompts, is not part of it. PACE does not
-replace application-layer agent protocols. A2A, MCP, AutoGen, and
+retrieved documents, or prompts, is not part of it. As in {{ARCH}},
+content is opaque to PACE: the MOQT binding carries it on content
+tracks without interpreting it, much as RTP carries payloads. PACE
+does not replace application-layer agent protocols. A2A, MCP, AutoGen, and
 similar protocols keep their native messages and carry the dialog
 context through their own extension points ({{protocol-bindings}}).
 
@@ -280,67 +288,6 @@ existing mechanisms, and auditing systems can use dialog identifiers.
 Dialog content, model behavior, planning, and task semantics are also
 out of scope.
 
-## Relationship to the Agent Communication Architecture {#arch-relationship}
-
-{{ARCH}} defines the terminology and architecture for the Agent
-Communication Protocol (ACP). PACE realizes the Agentic Dialog
-Management block of that architecture ({{Section 6.1 of ARCH}}) and
-provides the MOQT profile that {{Section 9.1 of ARCH}} identifies as
-needed: a common mapping of request/response and streaming patterns
-onto the publish/subscribe model of MOQT.
-
-A two-party PACE dialog is an agentic dialog in the sense of {{ARCH}}.
-PACE also supports multi-party dialogs, which {{ARCH}} composes by
-cascading two-party dialogs; over MOQT, relay fan-out makes a single
-multi-party dialog inexpensive ({{topologies}}). Cascaded dialogs remain
-available and are linked with `parent_dialog_ids` ({{dialog-context}}).
-
-PACE keeps its own terms because a dialog can have more than two
-participants. They correspond to {{ARCH}} as follows:
-
-| ARCH | PACE |
-|---|---|
-| Agentic dialog | Dialog |
-| Agentic Dialog Identifier (ADID) | dialog-id |
-| Dialog context: meta-data | Dialog context ({{dialog-context}}) |
-| Dialog context: log | Objects on the dialog's content tracks ({{namespace}}); each object's MOQT Location identifies a log entry |
-| ADID delegation chain | `parent_dialog_ids` |
-| Principal and client, agent and server | Participants; the controller is usually the principal's client |
-| Response output | `chat`, `audio`, and `video` tracks |
-| Information output | Operation and protocol binding tracks |
-| Progress output | `progress` track |
-| Delivery semantic classes ({{Section 8.1 of ARCH}}) | Modality classes ({{data-exchange}}) |
-{: title="Mapping of ARCH Terms to PACE"}
-
-As in {{ARCH}}, content is opaque to PACE: the MOQT binding carries the
-log on content tracks without interpreting it, much as RTP carries
-payloads. Relay caching and join fetch provide the rehydration that
-{{ARCH}} requires ({{dialog-recovery}}).
-
-The lifecycle functions of {{Section 6.1.2 of ARCH}} map to PACE as
-follows:
-
-Initiation:
-: OPEN, committed by UPDATE once an invitee accepts ({{lifecycle}}).
-
-Termination:
-: TERMINATE, or expiry. A participant other than the controller ends
-  a two-party dialog with LEAVE.
-
-Suspension:
-: An idle period with no MOQT session, or REQUEST_UPDATE with
-  FORWARD=0 to pause individual tracks.
-
-Resumption:
-: STATE_REQUEST for the dialog context, and a join fetch from the last
-  received Location for content, so a participant can tell which
-  content was published while it was away before deciding whether to
-  resend its own input ({{dialog-recovery}}).
-
-Cancellation:
-: CANCEL, scoped to an operation, a delegated subtree, or all of the
-  sender's work in the dialog ({{cancellation}}).
-
 ## Requirements Language
 
 {::boilerplate bcp14-tagged}
@@ -350,23 +297,32 @@ Cancellation:
 Dialog:
 : The correlated sequence of interactions between two or more
   participants over the course of a task. A dialog can outlast any
-  single message exchange, MOQT session, or transport connection.
+  single message exchange, MOQT session, or transport connection. A
+  two-party dialog is an agentic dialog in the sense of {{ARCH}}, which
+  composes larger topologies by cascading two-party dialogs; PACE
+  supports both cascaded and multi-party dialogs ({{topologies}}).
 
 Dialog context:
 : The identifiers and lifecycle state needed to correlate and
   maintain a dialog ({{dialog-context}}). The dialog context does not
   include content exchanged with AI models, such as conversation
-  memory, retrieved documents, prompts, or media payloads.
+  memory, retrieved documents, prompts, or media payloads. It
+  corresponds to the meta-data of the {{ARCH}} dialog context; the
+  {{ARCH}} log is the sequence of objects on the dialog's content
+  tracks, each identified by its MOQT Location.
 
 Dialog identifier (dialog-id):
-: A UUID that names a dialog for its whole lifetime.
+: A UUID that names a dialog for its whole lifetime. It corresponds to
+  the Agentic Dialog Identifier (ADID) of {{ARCH}}.
 
 Participant:
 : A user-facing client, agent, tool, or service that takes part in a
   dialog and processes its dialog context. Each participant has a
   participant identifier that is unique within the dialog. In the
   MOQT binding, the participant identifier is the agent-id in the
-  participant's namespace ({{namespace}}).
+  participant's namespace ({{namespace}}). A participant plays the
+  principal or agent role of {{ARCH}}; the controller is usually the
+  principal's client.
 
 Controller:
 : The participant that opened the dialog. The controller is the
@@ -663,6 +619,15 @@ terminate the dialog. When the controller commits a LEAVE that leaves
 it as the only active participant, it SHOULD publish TERMINATE. This
 lets an agent that is not the controller end a two-party dialog
 ({{Section 4.2.5 of ARCH}}).
+
+The control operations below cover the lifecycle functions of
+{{Section 6.1.2 of ARCH}}. Initiation is OPEN, and termination is
+TERMINATE, expiry, or a LEAVE that ends a two-party dialog. Suspension
+needs no operation: a dialog persists through idle periods with no
+MOQT session, and REQUEST_UPDATE pauses individual tracks
+({{dialog-recovery}}). Resumption is STATE_REQUEST together with a join
+fetch of content ({{dialog-recovery}}), and cancellation is CANCEL
+({{cancellation}}).
 
 PACE defines the following control operations:
 
@@ -962,11 +927,14 @@ Each participant in a dialog publishes the following tracks:
 * `"audio"` — Real-time audio stream
 * `"video"` — Real-time video stream
 * `"progress"` — Progress output, such as token counts, elapsed time,
-  and liveness, kept apart from the response ({{Section 4.2.11 of ARCH}})
+  and liveness, kept apart from the response
 * `"ops/{req-id}"` — Request/response operations (one track per request)
 
 Only the `ctrl` track carries the dialog context. The other tracks
-carry dialog content and are outside the dialog context.
+carry dialog content and are outside the dialog context. In the terms
+of {{Section 4.2.11 of ARCH}}, `chat`, `audio`, and `video` carry
+response output, operation and protocol binding tracks carry
+information output, and `progress` carries progress output.
 
 Protocol bindings extend the dialog namespace with additional
 namespace fields, so that multiple protocols can operate concurrently
@@ -1277,7 +1245,10 @@ Dialog Resumption:
   controller's `ctrl` track, and sends STATE_REQUEST with its last
   accepted generation. It applies the controller's STATE only after
   authenticating the controller and checking that the generation is
-  not older than its last accepted one ({{propagation}}).
+  not older than its last accepted one ({{propagation}}). A join fetch
+  from the last Location it received then shows which content was
+  published while it was away, so it can decide whether to resend its
+  own input ({{Section 6.1.2 of ARCH}}).
 
 Join Fetch for Mid-Dialog Catch-Up:
 : An agent joining a dialog in progress, or recovering after a
@@ -1512,6 +1483,10 @@ PACE defines the following data modality classes:
 | Semi-real-time | < 1s | Chat messages, streaming LLM output | Ordered objects |
 | Non-real-time | Best effort | Tool calls, file transfers, context | Reliable delivery |
 
+These classes correspond to the low-latency loss-tolerant, reliable
+ordered, and high-throughput reliable delivery semantics of
+{{Section 8.1 of ARCH}}.
+
 ## Channel Architecture
 
 Each modality maps to dedicated MOQT tracks within the Dialog
@@ -1536,9 +1511,12 @@ based on urgency and modality. PACE defines the following priority tiers:
 | 192-255 | Bulk Transfer | File transfers, context exchange |
 
 Priority is advisory and policy-controlled ({{Section 8.3 of ARCH}}).
-A relay MAY lower the priority of objects whose publisher is not
-authorized for the tier it requested, so a participant cannot raise
-the urgency of its traffic beyond the authority of its task.
+MOQT relays forward Publisher Priority unchanged, so PACE applies
+policy through subscriber priority, which MOQT applies before publisher
+priority. A subscriber sets the subscriber priority of each
+subscription according to its policy for that peer and track, and can
+change it with REQUEST_UPDATE, so a publisher cannot raise the urgency
+of its traffic beyond what its subscribers allow.
 
 ## Request/Response Pattern {#request-response}
 
