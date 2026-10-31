@@ -192,10 +192,10 @@ content of the dialog itself.
 This document defines the Protocol for Agent Communication Exchange
 (PACE). PACE has two parts:
 
-* An agentic dialog management protocol ({{dialog-management}}):
-  the dialog context, the control operations that manage its
-  lifecycle, and the rules participants and intermediaries follow
-  when propagating it. This part is independent of any transport.
+* A transport-independent agentic dialog management protocol
+  ({{dialog-management}}): the dialog context, the control operations
+  that manage its lifecycle, and the rules participants and
+  intermediaries follow when propagating it.
 * A binding of that protocol to Media over QUIC Transport (MOQT)
   {{MoQ-TRANSPORT}} ({{moqt-binding}}, {{dialog-over-moqt}}), which
   carries the dialog context on MOQT tracks and uses MOQT relays for
@@ -204,9 +204,8 @@ This document defines the Protocol for Agent Communication Exchange
 
 In terms of the Agent Communication Protocol architecture {{ARCH}}, the
 first part realizes the Agentic Dialog Management block
-({{Section 6.1 of ARCH}}), and the second is the MOQT profile that
-{{Section 9.1 of ARCH}} calls for: a common mapping of request/response
-and streaming patterns onto the publish/subscribe model of MOQT.
+({{Section 6.1 of ARCH}}), and the second is the MOQT profile corresponding
+to {{Section 9.1 of ARCH}}.
 
 The dialog context consists of identifiers and lifecycle state only.
 Content exchanged with AI models, such as conversation memory,
@@ -230,57 +229,39 @@ that is already queued. PACE is designed for these dialogs.
 
 PACE addresses the following goals.
 
-Dialog correlation:
-: A dialog identifier that stays stable across hops, intermediaries,
-  trust boundaries, modality changes, and time. Defined by the dialog
-  context: identifier, generation, state, controller, and
+* Dialog correlation: A dialog identifier that stays stable across hops,
+  intermediaries, trust boundaries, modality changes, and time. Defined
+  by the dialog context: identifier, generation, state, controller, and
   participants ({{dialog-context}}).
-
-Multi-modal exchange:
-: Real-time media, chat, streaming model output, and request/response
-  operations in one dialog. Each modality keeps its own latency and
-  reliability, and none of them delays the others, even when they
-  share one transport session ({{data-exchange}}).
-
-Multi-party exchange:
-: Point-to-point, point-to-multipoint, and multi-party dialogs among
-  agents and people. Relays fan out each message, so a sender
-  publishes once however many participants there are, and late
-  joiners catch up from relay caches ({{topologies}}).
-
-Low-latency interaction:
-: Dialog control, including interruption and cancellation, takes
-  effect within the latency of natural conversation and ahead of
-  queued content, so that agents can hold an interactive voice
-  conversation ({{data-exchange}}).
-
-Dialog lifecycle:
-: Opening, updating, and terminating dialogs, and revoking
-  propagation relationships, with the controller as the single
+* Multi-modal exchange: Real-time media, chat, streaming model output,
+  and request/response operations in one dialog. Each modality keeps its
+  own latency and reliability, and none of them delays the others, even
+  when they share one transport session ({{data-exchange}}).
+* Multi-party exchange: Point-to-point, point-to-multipoint, and
+  multi-party dialogs among agents and people. Relays fan out each
+  message, so a sender publishes once however many participants there
+  are, and late joiners catch up from relay caches ({{topologies}}).
+* Low-latency interaction: Dialog control, including interruption and
+  cancellation, takes effect within the latency of natural conversation
+  and ahead of queued content, so that agents can hold an interactive
+  voice conversation ({{data-exchange}}).
+* Dialog lifecycle: Opening, updating, and terminating dialogs, and
+  revoking propagation relationships, with the controller as the single
   authoritative source of state ({{lifecycle}}).
-
-Resilience:
-: Recovery from path and intermediary failures, resumption after
-  interruption, and defined behavior when a participant or the
+* Resilience: Recovery from path and intermediary failures, resumption
+  after interruption, and defined behavior when a participant or the
   controller is unreachable ({{propagation}}, {{dialog-recovery}}).
-
-Transport independence:
-: A dialog model that any transport can carry. This document
-  specifies a MOQT binding: namespaces, tracks, operation mapping,
-  and delivery ({{moqt-binding}}).
-
-Application protocol reuse:
-: MCP, the Personal Agent Protocol, AutoGen, and A2A keep their native
-  messages and carry the dialog context ({{protocol-bindings}}).
-
-Identity and authorization reuse:
-: Agent identity separate from user identity, delegated
-  authorization, and selective disclosure, without mandating a token
-  format ({{identity-discovery}}, {{authorization}}).
-
-Privacy:
-: Mitigations for linkage through persistent dialog and participant
-  identifiers ({{privacy}}).
+* Transport independence: A dialog model that any transport can carry.
+  This document specifies a MOQT binding: namespaces, tracks, operation
+  mapping, and delivery ({{moqt-binding}}).
+* Application protocol reuse: MCP, the Personal Agent Protocol, AutoGen,
+  and A2A keep their native messages and carry the dialog context
+  ({{protocol-bindings}}).
+* Identity and authorization reuse: Agent identity separate from user
+  identity, delegated authorization, and selective disclosure, without
+  mandating a token format ({{identity-discovery}}, {{authorization}}).
+* Privacy: Mitigations for linkage through persistent dialog and
+  participant identifiers ({{privacy}}).
 
 PACE does not define trust frameworks,
 authorization protocols, or audit data structures; deployments use
@@ -307,7 +288,7 @@ Dialog context:
   maintain a dialog ({{dialog-context}}). The dialog context does not
   include content exchanged with AI models, such as conversation
   memory, retrieved documents, prompts, or media payloads. It
-  corresponds to the meta-data of the {{ARCH}} dialog context; the
+  corresponds to the meta-data of the {{ARCH}} dialog context, the
   {{ARCH}} log is the sequence of objects on the dialog's content
   tracks, each identified by its MOQT Location.
 
@@ -379,38 +360,26 @@ Live dialogs ({{scope}}) place the following requirements on the
 transport that carries them. They refine the transport aspects of
 {{Section 8 of ARCH}} for live, multi-modal dialogs.
 
-Low latency:
-: Each flow reaches participants within the latency its modality
-  needs: under 100 ms for real-time media, and under a second for chat
-  and streaming model output ({{data-exchange}}). A loss or a backlog
-  on one flow does not add delay to another.
-
-Push delivery:
-: Content, new participants, new flows, and new dialogs reach
-  participants as soon as they are published, without polling.
-
-Interruption:
-: Dialog control, such as an interruption or a cancellation, reaches
-  its receiver ahead of content that is already queued. Real-time
-  content that is too late to be useful is dropped instead of being
-  delivered late.
-
-Concurrent flows:
-: Real-time media, chat, streaming model output, tool calls, and bulk
-  transfers share one dialog and one connection, each with its own
-  priority and reliability.
-
-Fan-out:
-: One message reaches every participant without the sender sending a
-  copy to each. Participants that join late or reconnect can catch up.
-
-Continuity:
-: A dialog survives connection migration, network changes,
+* Low latency: Each flow reaches participants within the latency its
+  modality needs: under 100 ms for real-time media, and under a second
+  for chat and streaming model output ({{data-exchange}}). A loss or a
+  backlog on one flow does not add delay to another.
+* Push delivery: Content, new participants, new flows, and new dialogs
+  reach participants as soon as they are published, without polling.
+* Interruption: Dialog control, such as an interruption or a
+  cancellation, reaches its receiver ahead of content that is already
+  queued. Real-time content that is too late to be useful is dropped
+  instead of being delivered late.
+* Concurrent flows: Real-time media, chat, streaming model output, tool
+  calls, and bulk transfers share one dialog and one connection, each
+  with its own priority and reliability.
+* Fan-out: One message reaches every participant without the sender
+  sending a copy to each. Participants that join late or reconnect can
+  catch up.
+* Continuity: A dialog survives connection migration, network changes,
   reconnection, and intermediaries.
-
-Scale and control:
-: Dialogs scale through intermediaries across regions, and each
-  intermediary enforces who may send and receive.
+* Scale and control: Dialogs scale through intermediaries across
+  regions, and each intermediary enforces who may send and receive.
 
 Request/response mechanisms might not meet these requirements. When a
 dialog's flows share one ordered connection, a cancellation waits
@@ -426,61 +395,50 @@ protocol over QUIC. It meets each requirement in
 {{transport-requirements}} with a transport mechanism, so agent
 protocols do not need to rebuild them.
 
-Low latency:
-: Objects are sent as soon as they are produced, on QUIC streams or
-  datagrams alike, and relays forward them as they arrive, without
-  waiting for the rest of a group. Each track has its own streams, so
-  a loss on one flow does not hold up the others. Datagrams are not
-  retransmitted, so real-time media keeps flowing under congestion
-  instead of waiting for lost data.
-
-Push delivery:
-: Agents publish and subscribe directly, with no polling and no
-  long-lived HTTP connections. Content reaches subscribers as soon as
-  it is published. SUBSCRIBE_TRACKS on a namespace prefix delivers all
-  current and future tracks under that prefix, so new dialogs and
-  flows appear without a separate signaling channel. Output that
-  arrives minutes or hours after its input reaches the subscriber without a webhook or a client-side HTTP server.
-
-Interruption:
-: Publisher priority (per subgroup or datagram) and subscriber priority
-  (per subscription) let dialog control overtake queued
-  lower-priority data, so a cancellation reaches the agent ahead of
-  output already in flight. Per-track delivery timeouts let the publisher mark
-  time-sensitive objects: objects that miss the deadline, such as a
-  voice frame whose playout window has passed, are dropped at the relay
-  instead of wasting bandwidth and queue depth.
-
-Concurrent flows:
-: One MOQT session carries sub-100ms media, sub-second chat, and
-  best-effort bulk transfers at the same time, in one congestion
-  control context. Objects can be delivered over QUIC datagrams, which
-  suit real-time audio and video where lower latency matters more than
-  retransmission, or over QUIC streams, which suit agent chat,
-  operations, and bulk transfers that need ordered, reliable delivery.
-
-Fan-out:
-: A single PUBLISH reaches every subscriber through the relay, so
-  multi-agent collaboration does not need application-level broadcast
+* Low latency: Objects are sent as soon as they are produced, on QUIC
+  streams or datagrams alike, and relays forward them as they arrive,
+  without waiting for the rest of a group. Each track has its own
+  streams, so a loss on one flow does not hold up the others. Datagrams
+  are not retransmitted, so real-time media keeps flowing under
+  congestion instead of waiting for lost data.
+* Push delivery: Agents publish and subscribe directly, with no polling
+  and no long-lived HTTP connections. Content reaches subscribers as
+  soon as it is published. SUBSCRIBE_TRACKS on a namespace prefix
+  delivers all current and future tracks under that prefix, so new
+  dialogs and flows appear without a separate signaling channel. Output
+  that arrives minutes or hours after its input reaches the subscriber
+  without a webhook or a client-side HTTP server.
+* Interruption: Publisher priority (per subgroup or datagram) and
+  subscriber priority (per subscription) let dialog control overtake
+  queued lower-priority data, so a cancellation reaches the agent ahead
+  of output already in flight. Per-track delivery timeouts let the
+  publisher mark time-sensitive objects: objects that miss the deadline,
+  such as a voice frame whose playout window has passed, are dropped at
+  the relay instead of wasting bandwidth and queue depth.
+* Concurrent flows: One MOQT session carries sub-100ms media, sub-second
+  chat, and best-effort bulk transfers at the same time, in one
+  congestion control context. Objects can be delivered over QUIC
+  datagrams, which suit real-time audio and video where lower latency
+  matters more than retransmission, or over QUIC streams, which suit
+  agent chat, operations, and bulk transfers that need ordered, reliable
+  delivery.
+* Fan-out: A single PUBLISH reaches every subscriber through the relay,
+  so multi-agent collaboration does not need application-level broadcast
   code, and the publisher keeps no per-subscriber state. Relay caches
-  let late-joining or reconnecting agents catch up without the
-  publisher retransmitting.
-
-Continuity:
-: QUIC provides connection migration (for example, from Wi-Fi to
-  cellular) and 0-RTT resumption. A dialog is not tied to a MOQT
-  session: one dialog can span several sessions ({{terminology}}). An
-  agent namespace is not tied to a host either, so the principal and
-  the agent can each move between hosts over a dialog's lifetime
-  and a new client instance catches up from relay caches.
-
-Scale and control:
-: Relays handle NAT traversal, load balancing, and fan-out without
-  direct peer-to-peer connections, and they can be stacked
-  hierarchically to spread load across regions without an all-to-all
-  mesh. Namespace-level access control maps onto agent authorization
-  scopes: the relay decides who may publish or subscribe to each
-  namespace. QUIC provides TLS 1.3 for every hop.
+  let late-joining or reconnecting agents catch up without the publisher
+  retransmitting.
+* Continuity: QUIC provides connection migration (for example, from
+  Wi-Fi to cellular) and 0-RTT resumption. A dialog is not tied to a
+  MOQT session: one dialog can span several sessions ({{terminology}}).
+  An agent namespace is not tied to a host either, so the principal and
+  the agent can each move between hosts over a dialog's lifetime and a
+  new client instance catches up from relay caches.
+* Scale and control: Relays handle NAT traversal, load balancing, and
+  fan-out without direct peer-to-peer connections, and they can be
+  stacked hierarchically to spread load across regions without an
+  all-to-all mesh. Namespace-level access control maps onto agent
+  authorization scopes: the relay decides who may publish or subscribe
+  to each namespace. QUIC provides TLS 1.3 for every hop.
 
 Where UDP is blocked, the same MOQT binding can run over QMux
 {{QMUX}}, which provides QUIC stream and datagram operations over TLS
@@ -498,39 +456,27 @@ in {{moqt-binding}}.
 
 A dialog context contains the following fields:
 
-dialog-id:
-: A UUID version 4 {{RFC9562}}. The controller generates it when
-  opening the dialog. It remains unchanged for the lifetime of the
+* dialog-id: A UUID version 4 {{RFC9562}}. The controller generates it
+  when opening the dialog. It remains unchanged for the lifetime of the
   dialog, including when the dialog crosses an intermediary, changes
   modality, or resumes after a connection loss.
-
-generation:
-: An unsigned integer identifying the current controller state. The
-  initial generation is 0. The controller increments it by one for
-  each committed change to the dialog context, including a change in
-  a participant's state.
-
-state:
-: One of `pending`, `active`, or `terminated`.
-
-controller-id:
-: The participant identifier of the controller.
-
-participants:
-: The set of participant identifiers in the dialog, each with a state:
-  `invited`, `active`, `left`, `rejected`, or `revoked`.
-
-expires-at:
-: An optional absolute time in RFC 3339 date-time format. When
-  present, participants treat the dialog as terminated at that time.
-
-parent-dialog-ids:
-: An optional list of dialog-ids, set by the controller in OPEN when
-  the dialog is opened to carry out work delegated from another dialog.
-  The first entry is the dialog that triggered this one, followed by
-  that dialog's own parents, so the list traces the delegation chain
-  back to the originating dialog ({{Section 6.2.1 of ARCH}}). It does
-  not change after OPEN.
+* generation: An unsigned integer identifying the current controller
+  state. The initial generation is 0. The controller increments it by
+  one for each committed change to the dialog context, including a
+  change in a participant's state.
+* state: One of `pending`, `active`, or `terminated`.
+* controller-id: The participant identifier of the controller.
+* participants: The set of participant identifiers in the dialog, each
+  with a state: `invited`, `active`, `left`, `rejected`, or `revoked`.
+* expires-at: An optional absolute time in RFC 3339 date-time format.
+  When present, participants treat the dialog as terminated at that
+  time.
+* parent-dialog-ids: An optional list of dialog-ids, set by the
+  controller in OPEN when the dialog is opened to carry out work
+  delegated from another dialog. The first entry is the dialog that
+  triggered this one, followed by that dialog's own parents, so the list
+  traces the delegation chain back to the originating dialog ({{Section
+  6.2.1 of ARCH}}). It does not change after OPEN.
 
 The context is encoded as a JSON object:
 
@@ -700,17 +646,16 @@ an operation MUST NOT reinterpret it; it responds with ERROR giving
 
 A principal that interrupts an agent, a policy decision, or a failed
 subtask can require work to stop at once. PACE carries cancellation as
-a dialog control operation rather than relying on connection teardown, so it travels on the `ctrl` track at
+a dialog control operation rather than relying on connection teardown, 
+so it travels on the `ctrl` track at
 critical priority, ahead of queued content ({{data-exchange}}).
 
 CANCEL does not change the dialog context and does not end the dialog.
 Its `scope` member selects the work to stop:
 
-operation:
-: A single operation the sender started, named in `target`.
+operation:  A single operation the sender started, named in `target`.
 
-subtree:
-: All work the receivers carry out in delegated dialogs whose
+subtree: All work the receivers carry out in delegated dialogs whose
   `parent_dialog_ids` include this dialog. A receiver that controls
   such a dialog sends CANCEL with scope `dialog` in it, so cancellation
   propagates down the delegation chain and dependent subtasks do not
@@ -736,44 +681,35 @@ of these outcomes:
 
 ## Propagation and Continuity {#propagation}
 
-Correlation across hops:
-: An intermediary MUST preserve the dialog identifier, generation, and
-  lifecycle operation when forwarding dialog context. It MUST NOT
-  create a new dialog identifier or change the dialog state. This
-  document defines no identifier-alias mechanism; a deployment that
-  needs aliases requires a separate mechanism that securely correlates
-  the alias with the original dialog.
-
-Trust boundaries:
-: A participant forwarding dialog context into another trust domain
-  does so only within a propagation relationship that the
-  deployment's authorization mechanism permits. Authorization to
-  forward or subscribe at the transport layer does not by itself make
-  an entity a participant.
-
-Modality changes:
-: Transforming a modality, such as converting audio to text, does not
-  create a new dialog. Participants and intermediaries MUST keep the
-  same dialog identifier and current lifecycle state across the
-  transformation.
-
-Continuity over time:
-: After a connection loss, a participant MAY reconnect, over a new
-  transport session if necessary, using the existing dialog
-  identifier. It MUST obtain the current context from the controller
-  with STATE_REQUEST before acting on state that may have changed
-  while it was disconnected. Recovering the dialog context does not
-  imply that any application operation was delivered or completed, or
-  that it is safe to retry.
-
-Unreachability:
-: If the controller is unreachable, participants MUST suspend actions
-  that depend on an unconfirmed context change. The dialog remains at
-  its last committed generation until the controller is reachable
-  again or the dialog expires. Participants MUST NOT create a
-  replacement dialog solely because a path or intermediary failed. If
-  an invitee or participant is unreachable, the controller MAY revoke
-  it or let the dialog expire, according to deployment policy.
+* Correlation across hops: An intermediary MUST preserve the dialog
+  identifier, generation, and lifecycle operation when forwarding dialog
+  context. It MUST NOT create a new dialog identifier or change the
+  dialog state. This document defines no identifier-alias mechanism; a
+  deployment that needs aliases requires a separate mechanism that
+  securely correlates the alias with the original dialog.
+* Trust boundaries: A participant forwarding dialog context into another
+  trust domain does so only within a propagation relationship that the
+  deployment's authorization mechanism permits. Authorization to forward
+  or subscribe at the transport layer does not by itself make an entity
+  a participant.
+* Modality changes: Transforming a modality, such as converting audio to
+  text, does not create a new dialog. Participants and intermediaries
+  MUST keep the same dialog identifier and current lifecycle state
+  across the transformation.
+* Continuity over time: After a connection loss, a participant MAY
+  reconnect, over a new transport session if necessary, using the
+  existing dialog identifier. It MUST obtain the current context from
+  the controller with STATE_REQUEST before acting on state that may have
+  changed while it was disconnected. Recovering the dialog context does
+  not imply that any application operation was delivered or completed,
+  or that it is safe to retry.
+* Unreachability: If the controller is unreachable, participants MUST
+  suspend actions that depend on an unconfirmed context change. The
+  dialog remains at its last committed generation until the controller
+  is reachable again or the dialog expires. Participants MUST NOT create
+  a replacement dialog solely because a path or intermediary failed. If
+  an invitee or participant is unreachable, the controller MAY revoke it
+  or let the dialog expire, according to deployment policy.
 
 ## Control Message Encoding {#control-encoding}
 
@@ -789,39 +725,25 @@ Every control message contains these members:
 
 Control messages also carry the following type-specific members:
 
-`context`:
-: The complete dialog context, encoded as the JSON object defined in
-  {{dialog-context}}.
-
-`in_reply_to`:
-: The `message_id` of the OPEN or UPDATE being accepted or rejected,
-  or of the CANCEL being acknowledged.
-
-`target_id`:
-: The participant identifier whose propagation relationship is
-  revoked.
-
-`scope`:
-: The cancellation scope: `operation`, `subtree`, or `dialog`
+* `context`: The complete dialog context, encoded as the JSON object
+  defined in {{dialog-context}}.
+* `in_reply_to`: The `message_id` of the OPEN or UPDATE being accepted
+  or rejected, or of the CANCEL being acknowledged.
+* `target_id`: The participant identifier whose propagation relationship
+  is revoked.
+* `scope`: The cancellation scope: `operation`, `subtree`, or `dialog`
   ({{cancellation}}).
-
-`target`:
-: The operation to cancel when `scope` is `operation`. Its form is
-  defined by the transport binding ({{cancel-over-moqt}}).
-
-`outcome`:
-: One of `stopped`, `completed`, or `irreversible`.
-
-`last_accepted_generation`:
-: The highest generation the sender has accepted from the controller,
-  or -1 if it has accepted none.
-
-`reason`:
-: One of `malformed`, `unsupported-version`, `unsupported-operation`,
-  `stale-generation`, `unauthorized`, `authorization-unavailable`,
-  `policy-rejected`, or `timeout`. These distinguish validation,
-  authorization, policy, and timeout failures from transport failures,
-  which MOQT reports separately ({{Section 6.1.5 of ARCH}}).
+* `target`: The operation to cancel when `scope` is `operation`. Its
+  form is defined by the transport binding ({{cancel-over-moqt}}).
+* `outcome`: One of `stopped`, `completed`, or `irreversible`.
+* `last_accepted_generation`: The highest generation the sender has
+  accepted from the controller, or -1 if it has accepted none.
+* `reason`: One of `malformed`, `unsupported-version`,
+  `unsupported-operation`, `stale-generation`, `unauthorized`,
+  `authorization-unavailable`, `policy-rejected`, or `timeout`. These
+  distinguish validation, authorization, policy, and timeout failures
+  from transport failures, which MOQT reports separately ({{Section
+  6.1.5 of ARCH}}).
 
 Each type requires the members listed below:
 
@@ -1026,29 +948,22 @@ is itself sensitive ({{privacy}}).
 
 Discovery and joining proceed in four steps:
 
-Advertise:
-: The controller publishes a descriptor track for each dialog it offers
-  under its `dialogs` namespace. It also subscribes to every track under
-  its `joins` namespace, because it does not know in advance who will
-  ask to join.
-
-Find:
-: A prospective participant browses `("pace","discovery","dialogs")` to
-  learn which agents offer dialogs, then reads the descriptors of the
-  agents it is interested in. The descriptor gives the dialog-id, the
-  controller, and the modalities, which the participant uses to decide
-  whether to join.
-
-Ask:
-: The prospective participant publishes a join track under the
+* Advertise: The controller publishes a descriptor track for each dialog
+  it offers under its `dialogs` namespace. It also subscribes to every
+  track under its `joins` namespace, because it does not know in advance
+  who will ask to join.
+* Find: A prospective participant browses
+  `("pace","discovery","dialogs")` to learn which agents offer dialogs,
+  then reads the descriptors of the agents it is interested in. The
+  descriptor gives the dialog-id, the controller, and the modalities,
+  which the participant uses to decide whether to join.
+* Ask: The prospective participant publishes a join track under the
   controller's `joins` namespace. The controller's subscription delivers
   the JOIN_REQUEST to it through the relay, and the controller validates
   the credentials and decides whether to admit the participant.
-
-Admit:
-: The controller subscribes to the joiner's agent namespace and invites
-  the joiner with UPDATE on its `ctrl` track. The joiner answers with
-  ACCEPT on its own `ctrl` track and ends its join track. The
+* Admit: The controller subscribes to the joiner's agent namespace and
+  invites the joiner with UPDATE on its `ctrl` track. The joiner answers
+  with ACCEPT on its own `ctrl` track and ends its join track. The
   controller's next UPDATE marks the joiner `active`, and the other
   participants then subscribe to the joiner's dialog namespace.
 
@@ -1222,58 +1137,46 @@ from producing objects and is not a cancellation.
 
 PACE recovers from network and intermediary failures in several ways:
 
-QUIC Connection Migration:
-: QUIC's connection ID lets a MOQT session survive network path
-  changes (such as WiFi to cellular). The dialog state is unaffected.
-
-Relay Caching:
-: Relays may cache recent objects, so a reconnecting agent can pick up
-  what it missed without the peer retransmitting. Relays are not
-  required to cache, and they never become the authoritative source
-  of the dialog context.
-
-Dialog Resumption:
-: After losing its MOQT session, an agent reconnects (to the same
-  relay or an alternate one), re-issues PUBLISH_NAMESPACE and
-  SUBSCRIBE_TRACKS on its agent prefix, resubscribes to the
+* QUIC Connection Migration: QUIC's connection ID lets a MOQT session
+  survive network path changes (such as WiFi to cellular). The dialog
+  state is unaffected.
+* Relay Caching: Relays may cache recent objects, so a reconnecting
+  agent can pick up what it missed without the peer retransmitting.
+  Relays are not required to cache, and they never become the
+  authoritative source of the dialog context.
+* Dialog Resumption: After losing its MOQT session, an agent reconnects
+  (to the same relay or an alternate one), re-issues PUBLISH_NAMESPACE
+  and SUBSCRIBE_TRACKS on its agent prefix, resubscribes to the
   controller's `ctrl` track, and sends STATE_REQUEST with its last
   accepted generation. It applies the controller's STATE only after
-  authenticating the controller and checking that the generation is
-  not older than its last accepted one ({{propagation}}). A join fetch
-  from the last Location it received then shows which content was
-  published while it was away, so it can decide whether to resend its
-  own input.
-
-Join Fetch for Mid-Dialog Catch-Up:
-: An agent joining a dialog in progress, or recovering after a
-  disconnect, uses the fill fetch mechanism from {{MoQ-TRANSPORT}}.
-  The subscriber issues SUBSCRIBE with FILL_PARAMETERS on the chat or
-  operation track; the publisher opens a unidirectional fill fetch
-  stream carrying the historical range (typically the latest complete
-  group) before live objects resume on the subscription. "Catch up on
-  prior content, then follow live" happens atomically, without a
-  separate FETCH roundtrip. For the dialog context itself, STATE is
-  authoritative; a fetched old `ctrl` object cannot establish the
-  current lifecycle state by itself.
-
-Bounded Historical Fetch:
-: To retrieve a specific range of past objects deterministically,
-  for example replaying a task's output history, agents use FETCH
-  with explicit Start and End Locations. The publisher confirms the
-  actual End Location in FETCH_OK.
-
-State Checkpointing:
-: Agents SHOULD publish application state checkpoints periodically on
-  a dedicated track so they can recover after a relay failure. On
-  recovery, an agent uses a join fetch to retrieve the latest
-  checkpoint and then follows the live stream.
-
-Unreachable Controller:
-: If the controller's `ctrl` track cannot be resubscribed, participants
-  follow the unreachability rules in {{propagation}}: they suspend
-  context-dependent actions and do not create a replacement dialog.
-  A slow subscriber whose subscription ends with PUBLISH_DONE
-  (TOO_FAR_BEHIND) resubscribes and resynchronizes with STATE_REQUEST.
+  authenticating the controller and checking that the generation is not
+  older than its last accepted one ({{propagation}}). A join fetch from
+  the last Location it received then shows which content was published
+  while it was away, so it can decide whether to resend its own input.
+* Join Fetch for Mid-Dialog Catch-Up: An agent joining a dialog in
+  progress, or recovering after a disconnect, uses the fill fetch
+  mechanism from {{MoQ-TRANSPORT}}. The subscriber issues SUBSCRIBE with
+  FILL_PARAMETERS on the chat or operation track; the publisher opens a
+  unidirectional fill fetch stream carrying the historical range
+  (typically the latest complete group) before live objects resume on
+  the subscription. "Catch up on prior content, then follow live"
+  happens atomically, without a separate FETCH roundtrip. For the dialog
+  context itself, STATE is authoritative; a fetched old `ctrl` object
+  cannot establish the current lifecycle state by itself.
+* Bounded Historical Fetch: To retrieve a specific range of past objects
+  deterministically, for example replaying a task's output history,
+  agents use FETCH with explicit Start and End Locations. The publisher
+  confirms the actual End Location in FETCH_OK.
+* State Checkpointing: Agents SHOULD publish application state
+  checkpoints periodically on a dedicated track so they can recover
+  after a relay failure. On recovery, an agent uses a join fetch to
+  retrieve the latest checkpoint and then follows the live stream.
+* Unreachable Controller: If the controller's `ctrl` track cannot be
+  resubscribed, participants follow the unreachability rules in
+  {{propagation}}: they suspend context-dependent actions and do not
+  create a replacement dialog. A slow subscriber whose subscription ends
+  with PUBLISH_DONE (TOO_FAR_BEHIND) resubscribes and resynchronizes
+  with STATE_REQUEST.
 
 ### Cancellation {#cancel-over-moqt}
 
@@ -1563,24 +1466,25 @@ ensuring media frames preempt lower-priority data under congestion.
 PACE supports multiple communication topologies through MOQT's relay
 fan-out:
 
-Point-to-Point:
-: Two agents publish and subscribe to each other's dialog tracks.
-  Used for tool invocation, task delegation, and bilateral collaboration.
-
-Point-to-Multipoint (Fan-Out):
-: One agent publishes; multiple agents subscribe. The relay handles
-  fan-out without the publisher maintaining per-subscriber state.
-  Used for broadcast notifications and shared context distribution.
-
-Multi-Party:
-: All participants publish on their own tracks and subscribe to
-  each other's tracks within the same dialog-id. The controller adds a
-  participant with UPDATE; existing participants see the new
-  participant in the context and subscribe to its dialog namespace.
-
-Hierarchical Teams:
-: A coordinator creates child PACE dialogs to delegate subtasks.
-  Each level operates as a separate dialog with narrowed authorization scope, and each child's `parent_dialog_ids` links it to the dialogs above it ({{dialog-context}}). Delegation chains ({{identity-discovery}}) maintain an auditable path from the original user authorization, and CANCEL with scope `subtree` stops the work below a level ({{cancellation}}).
+* Point-to-Point: Two agents publish and subscribe to each other's
+  dialog tracks. Used for tool invocation, task delegation, and
+  bilateral collaboration.
+* Point-to-Multipoint (Fan-Out): One agent publishes; multiple agents
+  subscribe. The relay handles fan-out without the publisher maintaining
+  per-subscriber state. Used for broadcast notifications and shared
+  context distribution.
+* Multi-Party: All participants publish on their own tracks and
+  subscribe to each other's tracks within the same dialog-id. The
+  controller adds a participant with UPDATE; existing participants see
+  the new participant in the context and subscribe to its dialog
+  namespace.
+* Hierarchical Teams: A coordinator creates child PACE dialogs to
+  delegate subtasks. Each level operates as a separate dialog with
+  narrowed authorization scope, and each child's `parent_dialog_ids`
+  links it to the dialogs above it ({{dialog-context}}). Delegation
+  chains ({{identity-discovery}}) maintain an auditable path from the
+  original user authorization, and CANCEL with scope `subtree` stops the
+  work below a level ({{cancellation}}).
 
 # Protocol Bindings {#protocol-bindings}
 
@@ -1875,18 +1779,13 @@ AutoGen messages are serialized as JSON with the following structure:
 
 AutoGen's conversation patterns map to MOQT as follows:
 
-Two-Agent Chat:
-: Each agent publishes to their message track. Agents subscribe to
-  their conversation partner's track.
-
-Group Chat:
-: A coordinator agent manages turn-taking. All agents subscribe to
-  the coordinator's broadcast track.
-
-Nested Chat:
-: Hierarchical conversations use nested dialog-ids. An outer agent
-  creates a child PACE dialog for the inner conversation, whose
-  `parent_dialog_ids` names the outer dialog.
+* Two-Agent Chat: Each agent publishes to their message track. Agents
+  subscribe to their conversation partner's track.
+* Group Chat: A coordinator agent manages turn-taking. All agents
+  subscribe to the coordinator's broadcast track.
+* Nested Chat: Hierarchical conversations use nested dialog-ids. An
+  outer agent creates a child PACE dialog for the inner conversation,
+  whose `parent_dialog_ids` names the outer dialog.
 
 ### Priority Mapping
 
@@ -1985,7 +1884,8 @@ to MOQT objects as follows:
 * Each streaming response creates a new MOQT group
 * TaskStatusUpdateEvent (state changes) and TaskArtifactUpdateEvent
   (output data) are individual objects within groups
-* Groups represent execution phases (initialization, progress, completion)
+* Groups represent execution phases (initialization, progress,
+  completion)
 
 ### A2A Agent Card with MOQT Extension {#a2a-agent-card}
 
