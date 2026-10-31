@@ -210,9 +210,9 @@ and streaming patterns onto the publish/subscribe model of MOQT.
 
 The dialog context consists of identifiers and lifecycle state only.
 Content exchanged with AI models, such as conversation memory,
-retrieved documents, or prompts, is not part of it. As in {{ARCH}},
-content is opaque to PACE: the MOQT binding carries it on content
-tracks without interpreting it, much as RTP carries payloads. PACE
+retrieved documents, or prompts, is not part of it.
+The content is opaque to PACE, the MOQT binding carries it on content
+tracks without interpreting it. PACE
 does not replace application-layer agent protocols. A2A, MCP, AutoGen, and
 similar protocols keep their native messages and carry the dialog
 context through their own extension points ({{protocol-bindings}}).
@@ -298,7 +298,7 @@ Dialog:
 : The correlated sequence of interactions between two or more
   participants over the course of a task. A dialog can outlast any
   single message exchange, MOQT session, or transport connection. A
-  two-party dialog is an agentic dialog in the sense of {{ARCH}}, which
+  two-party dialog is an agentic dialog {{ARCH}}, which
   composes larger topologies by cascading two-party dialogs; PACE
   supports both cascaded and multi-party dialogs ({{topologies}}).
 
@@ -312,8 +312,7 @@ Dialog context:
   tracks, each identified by its MOQT Location.
 
 Dialog identifier (dialog-id):
-: A UUID that names a dialog for its whole lifetime. It corresponds to
-  the Agentic Dialog Identifier (ADID) of {{ARCH}}.
+: A UUID that names a dialog for its whole lifetime.
 
 Participant:
 : A user-facing client, agent, tool, or service that takes part in a
@@ -441,9 +440,7 @@ Push delivery:
   it is published. SUBSCRIBE_TRACKS on a namespace prefix delivers all
   current and future tracks under that prefix, so new dialogs and
   flows appear without a separate signaling channel. Output that
-  arrives minutes or hours after its input ({{Section 4.2.6 of ARCH}})
-  reaches the subscriber without a webhook or a client-side HTTP
-  server.
+  arrives minutes or hours after its input reaches the subscriber without a webhook or a client-side HTTP server.
 
 Interruption:
 : Publisher priority (per subgroup or datagram) and subscriber priority
@@ -475,8 +472,7 @@ Continuity:
   session: one dialog can span several sessions ({{terminology}}). An
   agent namespace is not tied to a host either, so the principal and
   the agent can each move between hosts over a dialog's lifetime
-  ({{Section 5 of ARCH}}), and a new client instance catches up from
-  relay caches.
+  and a new client instance catches up from relay caches.
 
 Scale and control:
 : Relays handle NAT traversal, load balancing, and fan-out without
@@ -617,13 +613,12 @@ described in {{propagation}}. A participant's own state is tracked
 separately from the dialog state: joining or leaving does not by itself
 terminate the dialog. When the controller commits a LEAVE that leaves
 it as the only active participant, it SHOULD publish TERMINATE. This
-lets an agent that is not the controller end a two-party dialog
-({{Section 4.2.5 of ARCH}}).
+lets an agent that is not the controller end a two-party dialog.
 
 The control operations below cover the lifecycle functions of
 {{Section 6.1.2 of ARCH}}. Initiation is OPEN, and termination is
 TERMINATE, expiry, or a LEAVE that ends a two-party dialog. Suspension
-needs no operation: a dialog persists through idle periods with no
+needs no operation, a dialog persists through idle periods with no
 MOQT session, and REQUEST_UPDATE pauses individual tracks
 ({{dialog-recovery}}). Resumption is STATE_REQUEST together with a join
 fetch of content ({{dialog-recovery}}), and cancellation is CANCEL
@@ -705,8 +700,7 @@ an operation MUST NOT reinterpret it; it responds with ERROR giving
 
 A principal that interrupts an agent, a policy decision, or a failed
 subtask can require work to stop at once. PACE carries cancellation as
-a dialog control operation rather than relying on connection teardown
-({{Section 6.1.6 of ARCH}}), so it travels on the `ctrl` track at
+a dialog control operation rather than relying on connection teardown, so it travels on the `ctrl` track at
 critical priority, ahead of queued content ({{data-exchange}}).
 
 CANCEL does not change the dialog context and does not end the dialog.
@@ -1122,7 +1116,7 @@ publishes control objects in increasing Object ID order, and the
 controller publishes state-changing operations in increasing
 generation order. Because `ctrl` is a track of its own, a CANCEL,
 ERROR, or TERMINATE is not lost or delayed when a content track fails
-or falls behind ({{Section 6.1.5 of ARCH}}).
+or falls behind.
 
 ### Opening a Dialog
 
@@ -1248,7 +1242,7 @@ Dialog Resumption:
   not older than its last accepted one ({{propagation}}). A join fetch
   from the last Location it received then shows which content was
   published while it was away, so it can decide whether to resend its
-  own input ({{Section 6.1.2 of ARCH}}).
+  own input.
 
 Join Fetch for Mid-Dialog Catch-Up:
 : An agent joining a dialog in progress, or recovering after a
@@ -1510,7 +1504,6 @@ based on urgency and modality. PACE defines the following priority tiers:
 | 160-191 | Background | Telemetry, non-critical notifications |
 | 192-255 | Bulk Transfer | File transfers, context exchange |
 
-Priority is advisory and policy-controlled ({{Section 8.3 of ARCH}}).
 MOQT relays forward Publisher Priority unchanged, so PACE applies
 policy through subscriber priority, which MOQT applies before publisher
 priority. A subscriber sets the subscriber priority of each
@@ -1586,14 +1579,8 @@ Multi-Party:
   participant in the context and subscribe to its dialog namespace.
 
 Hierarchical Teams:
-: A coordinator creates child PACE dialogs to delegate subtasks, as
-  in the cascaded dialogs of {{ARCH}}. Each level operates as a
-  separate dialog with narrowed authorization scope, and each child's
-  `parent_dialog_ids` links it to the dialogs above it
-  ({{dialog-context}}). Delegation chains ({{identity-discovery}})
-  maintain an auditable path from the original user authorization, and
-  CANCEL with scope `subtree` stops the work below a level
-  ({{cancellation}}).
+: A coordinator creates child PACE dialogs to delegate subtasks. 
+  Each level operates as a separate dialog with narrowed authorization scope, and each child's `parent_dialog_ids` links it to the dialogs above it ({{dialog-context}}). Delegation chains ({{identity-discovery}}) maintain an auditable path from the original user authorization, and CANCEL with scope `subtree` stops the work below a level ({{cancellation}}).
 
 # Protocol Bindings {#protocol-bindings}
 
