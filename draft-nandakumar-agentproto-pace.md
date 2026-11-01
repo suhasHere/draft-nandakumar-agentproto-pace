@@ -119,17 +119,7 @@ informative:
     seriesinfo:
       Internet-Draft: draft-ietf-moq-c4m-01
     target: https://datatracker.ietf.org/doc/draft-ietf-moq-c4m/
-  MCP-MOQT:
-    title: "Model Context Protocol and Agent Skills over Media over QUIC Transport"
-    date: 2026
-    author:
-    - ins: C. Jennings
-    - ins: I. Swett
-    - ins: J. Rosenberg
-    - ins: S. Nandakumar
-    seriesinfo:
-      Internet-Draft: draft-jennings-agentproto-mcp-over-moqt
-    target: https://datatracker.ietf.org/doc/draft-jennings-agentproto-mcp-over-moqt/
+  MCP-MOQT: I-D.jennings-agentproto-mcp-over-moqt
   STIVERS:
     title: "Universals and cultural variation in turn-taking in conversation"
     date: 2009-06
