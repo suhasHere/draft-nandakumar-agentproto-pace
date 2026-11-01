@@ -72,6 +72,7 @@ informative:
   RFC9297:
   RFC9449:
   RFC9576:
+  RFC9901:
   POPPY:
     title: "Personal Agent Protocol (Poppy) Specification"
     date: 2026
@@ -85,18 +86,18 @@ informative:
     title: "Agent-to-Agent Protocol Specification"
     date: 2025
     author:
-    - org: A2A Project
+    - org: Linux Foundation
     seriesinfo:
-      Version: 0.3.0
-    target: https://google.github.io/A2A/specification/
+      Version: "1.0"
+    target: https://a2a-protocol.org/latest/
   MCP:
     title: "Model Context Protocol Specification"
-    date: 2025-11
+    date: 2026-07
     author:
-    - org: Anthropic
+    - org: Linux Foundation
     seriesinfo:
-      Version: 2025-11-25
-    target: https://modelcontextprotocol.io/specification/
+      Version: 2026-07-28
+    target: https://modelcontextprotocol.io/specification/2026-07-28
   AutoGen:
     title: "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation"
     date: 2023
@@ -151,15 +152,6 @@ informative:
     seriesinfo:
       DOI: 10.1073/pnas.0903616106
     refcontent: "Proceedings of the National Academy of Sciences, vol. 106, no. 26, pp. 10587-10592"
-  SD-AGENT:
-    title: "SD Agent: Selective Disclosure for Agent Discovery and Identity Management"
-    date: 2026-02
-    author:
-    - ins: S. Nandakumar
-    - ins: C. Jennings
-    seriesinfo:
-      Internet-Draft: draft-nandakumar-agent-sd-jwt-02
-    target: https://datatracker.ietf.org/doc/draft-nandakumar-agent-sd-jwt/
   SD-CARD:
     title: "Agent SD-Card: Selective Disclosure of Agent Metadata for Discovery and Authentication"
     date: 2026-10
@@ -1465,7 +1457,8 @@ MOQT SETUP, which is hop by hop ({{moqt-setup-extensions}}).
 | Mechanism | Identity | Authorization | Reference |
 |-----------|----------|---------------|-----------|
 | JWT | Agent and principal claims | Scope claims | {{RFC7519}} |
-| SD-JWT | Selectively disclosed claims | Selectively disclosed scope claims | {{SD-AGENT}} |
+| SD-JWT | Selectively disclosed claims | Selectively disclosed scope claims | {{RFC9901}} |
+| SD-Card | Attested agent metadata, key-bound presentation | Disclosure per discovery context | {{SD-CARD}} |
 | OAuth 2.0 access token (JWT or opaque) | Token claims | Delegated user authorization | {{RFC6749}} |
 | GNAP | | Fine-grained, continuous grants | {{RFC9635}} |
 | WIMSE workload credentials | Workload identity | With deployment policy | {{WIMSE-CREDS}} |
