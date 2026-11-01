@@ -1882,6 +1882,10 @@ Sign-in, token refresh, and client metadata stay on HTTPS.
   that opened it. The Company MUST reject control messages from any
   other client, User, or account, and MUST authorize subscriptions to
   the conversation's `events` and `deltas` tracks only for that owner.
+  Because the relay forwards these tracks to every agent following
+  the Company Agent's prefix, the relay enforces this
+  ({{relay-authorization}}): only the owner's token covers
+  `("pace","agents",{company-id},{dialog-id})`.
 * Signing in: When the Company Agent needs account access, it publishes
   an `authorization` event; the Personal Agent signs in over HTTPS and
   continues the same dialog with new credentials. Because control
@@ -1903,7 +1907,10 @@ Editor's note: A Poppy Session JWT is bound to an HTTP method and URL
 (`htm`, `htu`). How these claims apply to a PACE control message is to
 be agreed with the Poppy authors. The same question applies to the
 Poppy SD-Card extension, whose Key Binding JWT nonce is the `jti` of
-the Session JWT.
+the Session JWT. A Personal Agent's `credentials` in this binding are
+a Session JWT, not an SD-Card presentation, so whether the Company
+sends a `nonce` ({{key-binding}}) and how the Personal Agent answers
+it is also to be agreed.
 
 ## A2A Binding {#a2a-binding}
 
@@ -2015,6 +2022,38 @@ Identity assertions and authorization proofs are signed and
 short-lived. MOQT Common Access Tokens {{MoQ-C4M}} handle
 namespace-level authorization at the relay. Relays cannot read payload
 content unless the deployment explicitly trusts them to.
+
+### Relay Authorization {#relay-authorization}
+
+Following an agent ({{agent-discovery}}) subscribes to its whole
+prefix, so without further checks the relay would forward every
+dialog track the agent publishes to every follower, including
+dialogs the follower is not part of. The relay therefore checks each
+track it forwards for a SUBSCRIBE_TRACKS against the subscriber's
+token, not only the subscribed prefix, and forwards only tracks the
+token covers.
+
+The `moqt` claim of a Common Access Token matches each Track
+Namespace field exactly or by prefix {{MoQ-C4M}}, so a token can be
+scoped to a dialog without a new claim:
+
+~~~
+Follow agent A (card only):
+  [[SUBSCRIBE_NAMESPACE, SUBSCRIBE],
+   ["pace","agents","agent-a",nil], "card"]
+Participate in dialog D of agent A:
+  [[SUBSCRIBE, FETCH],
+   ["pace","agents","agent-a",D]]
+~~~
+
+A controller, or the authorization server it relies on, issues a
+token scoped to a dialog when it admits a participant, and stops
+revalidating it ({{Section 2.2 of MoQ-C4M}}) when the participant
+leaves or is removed.
+
+Editor's note: {{MoQ-C4M}} defines no action for SUBSCRIBE_TRACKS
+and does not yet say that a relay checks each forwarded track against
+the token. Both are to be raised with its authors.
 
 ## Privacy Considerations {#privacy}
 
