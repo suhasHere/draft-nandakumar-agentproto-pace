@@ -1684,21 +1684,12 @@ fields of an MCP over MOQT namespace are replaced by `("pace",
 namespace fields and the track name are kept unchanged. For example,
 with `{cli}` and `{srv}` the agent-ids of the MCP client and server:
 
-~~~
-MCP over MOQT:
-  (mcp, {server-id}, clients, {client-id}, tools, {tool-name})
-      -- request
-  (mcp, {server-id}, clients, {client-id}, tools, {tool-name})
-      -- response
-  (mcp, {server-id}, resources) -- {resource-uri}
-Within PACE:
-  ("pace","dialogs",{dialog-id},{cli},"mcp","tools",
-   {tool-name}) -- "request"
-  ("pace","dialogs",{dialog-id},{srv},"mcp","tools",
-   {tool-name}) -- "response"
-  ("pace","dialogs",{dialog-id},{srv},"mcp","resources")
-      -- {resource-uri}
-~~~
+| Track | MCP over MOQT | Within PACE |
+|-------|---------------|-------------|
+| Tool request | `(mcp, {server-id}, clients, {client-id}, tools, {tool-name}) -- request` | `("pace","dialogs",{dialog-id},{cli},"mcp","tools",{tool-name}) -- "request"` |
+| Tool response | `(mcp, {server-id}, clients, {client-id}, tools, {tool-name}) -- response` | `("pace","dialogs",{dialog-id},{srv},"mcp","tools",{tool-name}) -- "response"` |
+| Resource | `(mcp, {server-id}, resources) -- {resource-uri}` | `("pace","dialogs",{dialog-id},{srv},"mcp","resources") -- {resource-uri}` |
+{: title="MCP over MOQT Tracks within PACE"}
 
 MCP needs no handshake of its own, and MCP over MOQT client IDs are
 not used within PACE: PACE supplies the dialog-id, and peers learn
@@ -2108,7 +2099,8 @@ TODO
 The examples below share these conventions:
 
 * `D1` to `D7` stand for dialog-ids (UUIDs). `A`, `B`, and `C` are
-  agents with agent-ids `agent-a`, `agent-b`, and `agent-c`.
+  agents with agent-ids `agent-a`, `agent-b`, and `agent-c`; other
+  agents are named in the example that introduces them.
 * Before each example, every agent follows the others
   ({{agent-discovery}}). Each invitee learns the dialog-id from an
   invitation ({{invitations}}), and every participant holds
@@ -2117,6 +2109,9 @@ The examples below share these conventions:
   repeat the invitations or relay hops.
 * Each example lists the tracks by publisher, then the steps. `gen`
   is the dialog generation after a controller operation.
+* JSON-RPC messages are shown without the dialog reference
+  ({{carrying-dialog-context}}) and, for MCP, without the per-request
+  `_meta` fields of {{MCP}}; real messages carry both.
 
 ## Delegating a Task with A2A
 
@@ -2167,33 +2162,60 @@ fs-tool publishes:
    its `readFile` request track:
    `{"jsonrpc":"2.0","method":"tools/call","params":{"name":"readFile",
    "arguments":{"path":"/data/report.csv"}},"id":"t1"}`.
-3. fs-tool publishes the result in Group 7 of its `readFile` response
-   track. The JSON-RPC `id` pairs the response with the request; the
-   matching Group ID helps relays and recovery ({{MCP-MOQT}}).
+3. fs-tool publishes the result as the final object in Group 7 of its
+   `readFile` response track:
+   `{"jsonrpc":"2.0","id":"t1","result":{"resultType":"complete",
+   "content":[...]}}`. The JSON-RPC `id` pairs the response with the
+   request; the matching Group ID helps relays and recovery
+   ({{MCP-MOQT}}).
 4. A makes further calls as new groups, or terminates the dialog.
 
-## Streaming a Long-Running Tool Call
+## Long-Running Tool Call with Progress
 
-A asks `code-tool` to generate code, and the tool streams its output.
-The tracks follow the previous example, with tool `generateCode` in
-dialog `D3`.
+A asks `code-tool` to generate code. The call takes a while, so
+code-tool reports progress while it works and sends the code in the
+final result.
 
-1. A publishes the call as Group 5 on its `generateCode` request
-   track.
-2. code-tool publishes its output as objects in Group 5 of its
-   response track (see the table below). A receives each object as
-   soon as it is published.
-3. To cancel, A publishes `notifications/cancelled` as the next object
-   in Group 5 of its `generateCode` request track {{MCP-MOQT}}.
-   code-tool stops and ends Group 5 of its response track with an
+~~~
+A publishes:
+  ("pace","dialogs",D3,"agent-a") -- "ctrl"
+  ("pace","dialogs",D3,"agent-a","mcp","tools","generateCode")
+      -- "request"                                 tools/call,
+                                                   cancellation
+code-tool publishes:
+  ("pace","dialogs",D3,"code-tool") -- "ctrl"
+  ("pace","dialogs",D3,"code-tool","mcp","tools","generateCode")
+      -- "response"                                progress, result
+~~~
+
+1. A opens the dialog with code-tool (OPEN, ACCEPT, UPDATE).
+2. A publishes the call as Object 0 of Group 5 on its `generateCode`
+   request track, asking for progress with a `progressToken`:
+   `{"jsonrpc":"2.0","id":"g1","method":"tools/call","params":
+   {"name":"generateCode","arguments":{"language":"python"},
+   "_meta":{"progressToken":"g1"}}}`.
+3. code-tool publishes Group 5 of its `generateCode` response track as
+   shown in the table below. It sends the progress notifications in
+   one subgroup and the result in another, so that each is on its own
+   QUIC stream and a large result does not delay the progress
+   updates ({{MCP-MOQT}}). A receives each object as soon as it
+   arrives, orders them by Object ID, and knows the call is complete
+   when the result arrives.
+4. To cancel instead, A publishes `notifications/cancelled` as the next
+   object in Group 5 of its request track ({{MCP-MOQT}}). code-tool
+   stops and ends Group 5 of its response track with a JSON-RPC
    error.
 
-| Object | Content |
-|---|---|
-| 0 | Progress: `{"status":"started","language":"python"}` |
-| 1 | First code block |
-| 2 | Second code block |
-| 3 | Result: `{"status":"complete","totalLines":142}` |
+The table lists the objects in code-tool's reply, in Object ID order,
+and the subgroup that carries each.
+
+| Object | Subgroup | Content |
+|---|---|---|
+| 0 | 0 | `notifications/progress`: progress 0 of 3, "Planning modules" |
+| 1 | 0 | `notifications/progress`: progress 1 of 3, "Generated parser" |
+| 2 | 0 | `notifications/progress`: progress 2 of 3, "Generated tests" |
+| 3 | 1 | `tools/call` result with the generated code (142 lines) |
+{: title="Objects in code-tool's Reply to the Group 5 Call"}
 
 ## Interrupting a Voice Agent
 
@@ -2204,19 +2226,19 @@ speaking and cancel the tool call at once.
 
 ~~~
 U publishes:
-  ("pace","dialogs",D5,"user-u") -- "ctrl"         ACCEPT
-  ("pace","dialogs",D5,"user-u") -- "audio"        microphone
+  ("pace","dialogs",D4,"user-u") -- "ctrl"         ACCEPT
+  ("pace","dialogs",D4,"user-u") -- "audio"        microphone
 V publishes:
-  ("pace","dialogs",D5,"agent-v") -- "ctrl"        OPEN, UPDATE,
+  ("pace","dialogs",D4,"agent-v") -- "ctrl"        OPEN, UPDATE,
                                                    CANCEL
-  ("pace","dialogs",D5,"agent-v") -- "audio"       speech
-  ("pace","dialogs",D5,"agent-v") -- "chat"        reply text
-  ("pace","dialogs",D5,"agent-v","mcp","tools","search")
+  ("pace","dialogs",D4,"agent-v") -- "audio"       speech
+  ("pace","dialogs",D4,"agent-v") -- "chat"        reply text
+  ("pace","dialogs",D4,"agent-v","mcp","tools","search")
       -- "request"                                 tools/call
 search-tool publishes:
-  ("pace","dialogs",D5,"search-tool") -- "ctrl"    ACCEPT,
+  ("pace","dialogs",D4,"search-tool") -- "ctrl"    ACCEPT,
                                                    CANCEL_ACK
-  ("pace","dialogs",D5,"search-tool","mcp","tools","search")
+  ("pace","dialogs",D4,"search-tool","mcp","tools","search")
       -- "response"                                results
 ~~~
 
@@ -2257,23 +2279,23 @@ A coordinates research by B, a web researcher, and C, a data analyst.
 
 ~~~
 A publishes:
-  ("pace","dialogs",D4,"agent-a") -- "ctrl"        OPEN, UPDATE,
+  ("pace","dialogs",D5,"agent-a") -- "ctrl"        OPEN, UPDATE,
                                                    TERMINATE
-  ("pace","dialogs",D4,"agent-a") -- "chat"        assignments
+  ("pace","dialogs",D5,"agent-a") -- "chat"        assignments
 B publishes:
-  ("pace","dialogs",D4,"agent-b") -- "ctrl"        ACCEPT
-  ("pace","dialogs",D4,"agent-b") -- "chat"        status
-  ("pace","dialogs",D4,"agent-b","a2a","task") -- "research-1"
+  ("pace","dialogs",D5,"agent-b") -- "ctrl"        ACCEPT
+  ("pace","dialogs",D5,"agent-b") -- "chat"        status
+  ("pace","dialogs",D5,"agent-b","a2a","task") -- "research-1"
                                                    findings
 C publishes:
-  ("pace","dialogs",D4,"agent-c") -- "ctrl"        ACCEPT
-  ("pace","dialogs",D4,"agent-c") -- "chat"        status
-  ("pace","dialogs",D4,"agent-c","a2a","task") -- "analysis-1"
+  ("pace","dialogs",D5,"agent-c") -- "ctrl"        ACCEPT
+  ("pace","dialogs",D5,"agent-c") -- "chat"        status
+  ("pace","dialogs",D5,"agent-c","a2a","task") -- "analysis-1"
                                                    results
 ~~~
 
 Because each participant subscribes to the dialog prefix, every agent
-receives every other agent's tracks in `D4`; no per-track
+receives every other agent's tracks in `D5`; no per-track
 subscriptions are needed.
 
 1. A publishes OPEN (gen 0, B and C `invited`). B and C each publish
