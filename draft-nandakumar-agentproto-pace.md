@@ -301,8 +301,8 @@ Participant:
 : A user-facing client, agent, tool, or service that takes part in a
   dialog and processes its dialog context. Each participant has a
   participant identifier that is unique within the dialog. In the
-  MOQT binding, the participant identifier is the agent-id in the
-  participant's namespace ({{namespace}}). A participant plays the
+  MOQT binding, the participant identifier is the agent-id field of
+  the participant's tracks in the dialog namespace ({{namespace}}). A participant plays the
   principal or agent role of {{ARCH}}; the controller is usually the
   principal's client.
 
@@ -407,7 +407,7 @@ protocols do not need to rebuild them.
   and no long-lived HTTP connections. Content reaches subscribers as
   soon as it is published. SUBSCRIBE_TRACKS on a namespace prefix
   delivers all current and future tracks under that prefix, so new
-  dialogs and flows appear without a separate signaling channel. Output
+  participants and flows appear without a separate signaling channel. Output
   that arrives minutes or hours after its input reaches the subscriber
   without a webhook or a client-side HTTP server.
 * Interruption: Publisher priority (per subgroup or datagram) and
@@ -869,8 +869,9 @@ PACE uses MOQT's hierarchical namespace for routing, isolation, and
 multiplexing. In MOQT, content is addressed by a Track Namespace (an
 ordered set of up to 32 fields, compared as byte sequences
 {{MoQ-TRANSPORT}}) together with a Track Name. PACE organizes
-communication into three namespace scopes, described in the following
-subsections.
+communication into two namespace scopes: an agent namespace for each
+agent's identity and invitations, and a dialog namespace for all of a
+dialog's traffic.
 
 ### Agent Namespace
 
@@ -883,26 +884,31 @@ publishes the following tracks:
 
 * `"card"` — Agent Card containing capabilities, identity claims,
   authentication schemes, and MOQT connectivity information
+  ({{agent-card}})
+* `("pace", "agents", {agent-id}, "invites") -- {invitee-id}` — One
+  track per agent it invites to dialogs ({{invitations}})
 
 The common prefix `("pace", "agents")` enables SUBSCRIBE_NAMESPACE-based
-discovery of all agents on the network. Interested agents then issue
-SUBSCRIBE_TRACKS on a discovered agent's prefix to receive all current
-and future tracks published by that agent. See {{agent-discovery}} for
-the complete discovery flow.
+discovery of all agents on the network. An agent follows another by
+subscribing to its card and to the invitation track named by the
+follower's own agent-id. See {{agent-discovery}} for the complete
+discovery flow.
 
-### Dialog Communication Namespace
+### Dialog Namespace {#dialog-namespace}
 
 ~~~
-  ("pace", "agents", {agent-id}, {dialog-id}) -- {track}
+  ("pace", "dialogs", {dialog-id}, {agent-id}) -- {track}
 ~~~
 
 The dialog-id is the dialog identifier ({{dialog-context}}). The
 controller mints it when it opens the dialog. Each participant
-publishes its tracks for the dialog under its own agent namespace,
-using the shared dialog-id; the agent-id is the participant identifier
-used in the dialog context. Any peer that has already issued
-SUBSCRIBE_TRACKS on an agent's prefix is notified of new dialog tracks
-automatically, as PUBLISH messages forwarded by the relay.
+publishes its tracks for the dialog under its own agent-id field
+within the dialog's namespace; the agent-id is the participant
+identifier used in the dialog context. Each participant issues
+SUBSCRIBE_TRACKS on the dialog prefix `("pace", "dialogs",
+{dialog-id})`, so it receives every participant's tracks, including
+those of participants added later, as PUBLISH messages forwarded by
+the relay.
 
 Each participant in a dialog publishes the following tracks:
 
@@ -925,8 +931,8 @@ namespace fields, so that multiple protocols can operate concurrently
 within a single dialog without track name collisions:
 
 ~~~
-("pace", "agents", {agent-id}, {dialog-id}, {proto}, {category}, ...)
-    -- {id}
+("pace", "dialogs", {dialog-id}, {agent-id}, {proto}, {category},
+ ...) -- {id}
 ~~~
 
 * `{proto}` is the protocol identifier of the binding: `"mcp"`,
@@ -944,101 +950,63 @@ following Full Track Names are used:
 
 ~~~
 A2A: "agent-a" sends request "r1" (in a dialog with "agent-b")
-  ("pace","agents","agent-a",D,"a2a","request") -- "r1"
+  ("pace","dialogs",D,"agent-a","a2a","request") -- "r1"
 
 A2A: "agent-b" publishes updates for task "t1"
-  ("pace","agents","agent-b",D,"a2a","task") -- "t1"
+  ("pace","dialogs",D,"agent-b","a2a","task") -- "t1"
 
 MCP: client "agent-a" calls tool "read_file" on "fs-server"
-  ("pace","agents","agent-a",D,"mcp","tools","read_file")
+  ("pace","dialogs",D,"agent-a","mcp","tools","read_file")
       -- "request"
 
 MCP: "fs-server" publishes the result of that call
-  ("pace","agents","fs-server",D,"mcp","tools","read_file")
+  ("pace","dialogs",D,"fs-server","mcp","tools","read_file")
       -- "response"
 ~~~
 
 The MCP tracks are the MCP over MOQT tracks
 `(mcp, {session-id}, tools, {tool-name}) -- request` and
-`-- response` {{MCP-MOQT}}, re-rooted under each publisher's PACE
-namespace ({{mcp-binding}}).
+`-- response` {{MCP-MOQT}}, re-rooted under the dialog namespace and
+each publisher's agent-id ({{mcp-binding}}).
 
 See {{example-workflows}} for concrete examples of agent-to-agent,
 agent-to-tool, and multi-agent collaboration workflows.
 
 
-### Dialog Discovery Namespace {#dialog-discovery}
+### Invitations {#invitations}
 
 ~~~
-  ("pace", "discovery", "dialogs", {agent-id}) -- {dialog-id}
-  ("pace", "discovery", "joins", {agent-id}, {dialog-id})
-      -- {joiner-id}
+  ("pace", "agents", {controller-id}, "invites") -- {invitee-id}
 ~~~
 
-A controller advertises a dialog that others may join by publishing a
-descriptor track under its `dialogs` namespace, with the dialog-id as
-the track name. Each object on a descriptor track contains:
+An agent learns a dialog's dialog-id before it can subscribe to the
+dialog. A controller tells an invitee that follows it
+({{agent-discovery}}) by publishing on a track under its own agent
+namespace, named by the invitee's agent-id. Each object, in its own
+group, is a JSON object with these members:
 
 * `dialog_id` — The dialog identifier
-* `controller` — The controller's agent-id
-* `description` — Human-readable purpose of the dialog
-* `participants` — List of agent-ids currently in the dialog
-* `modalities` — Supported data modalities (text, audio, video, etc.)
+* `controller_id` — The controller's agent-id
+* `expires_at` — Optional; the time after which the invitation is
+  void
 
-An agent that accepts join requests, or dialogs opened by controllers
-that are not discoverable ({{opening}}), issues SUBSCRIBE_TRACKS on
-its `joins` namespace, `("pace","discovery","joins",{agent-id})`. A prospective participant
-asks to join by publishing a track under that namespace, named by its
-own agent-id. The controller treats the arrival of such a track as
-a join request and accepts it to read the request. The relay has no
-knowledge of dialogs or join requests: it handles the PUBLISH and its
-objects like any other track, forwarding them to the controller by
-namespace prefix match, and enforces only the deployment's
-authorization for publishing under that namespace
-({{authorization}}).
+An invitation only points to the dialog. The dialog context, including
+the OPEN or UPDATE that invites the agent, stays on the controller's
+`ctrl` track, which the invitee reads before deciding. Relay
+authorization ({{relay-authorization}}) forwards each invitation track
+only to the invitee it names, so other followers of the controller do
+not see it. An invitee that comes online late catches up on pending
+invitations with a join fetch and ignores those whose `expires_at` has
+passed.
 
-A join track is not a new message type. Like a `ctrl` track, it
-carries control messages ({{control-encoding}}) as object payloads;
-its first object is a JOIN_REQUEST, or an OPEN when a controller that
-is not discoverable opens a dialog ({{opening}}). The common members already tell
-the controller what it needs: `sender_id` is the joiner's agent-id
-(equal to the track name), which locates the joiner's namespace
-`("pace","agents",{sender_id})`, and `dialog_id` names the dialog
-(equal to the `{dialog-id}` field). `parameters` carries the dialog
-parameters the joiner proposes ({{dialog-parameters}}), and
-`credentials` its identity assertion and any authorization proof.
-The join track is only needed because the controller is not yet
-subscribed to the joiner's own `ctrl` track; once admitted, the
-joiner uses its `ctrl` track and ends the join track.
+An agent that does not follow the controller learns the dialog-id out
+of band, for example through the application protocol's own channel
+({{poppy-binding}}).
 
-A descriptor is advisory: the controller's STATE remains
-authoritative, and finding a dialog does not make an agent a
-participant. Controllers SHOULD NOT advertise dialogs whose existence
-is itself sensitive ({{privacy}}).
-
-Discovery and joining proceed in four steps:
-
-* Advertise: The controller publishes a descriptor track for each dialog
-  it offers under its `dialogs` namespace. It also subscribes to every
-  track under its `joins` namespace, because it does not know in advance
-  who will ask to join.
-* Find: A prospective participant browses
-  `("pace","discovery","dialogs")` to learn which agents offer dialogs,
-  then reads the descriptors of the agents it is interested in. The
-  descriptor gives the dialog-id, the controller, and the modalities,
-  which the participant uses to decide whether to join.
-* Ask: The prospective participant publishes a join track under the
-  controller's `joins` namespace. The controller's subscription delivers
-  the JOIN_REQUEST to it through the relay, and the controller validates
-  the credentials and decides whether to admit the participant.
-* Admit: The controller subscribes to the joiner's agent namespace and
-  invites the joiner with UPDATE on its `ctrl` track. The joiner answers
-  with ACCEPT on its own `ctrl` track and ends its join track. The
-  controller's next UPDATE marks the joiner `active`, and the other
-  participants then subscribe to the joiner's dialog namespace.
-
-A controller that declines does not invite the joiner. The joiner stops
-waiting after a local timeout and ends its join track with PUBLISH_DONE.
+Editor's note: This document does not define how to invite an agent
+that neither follows the controller nor can be reached out of band, or
+how to advertise a dialog for others to join. These are left for
+future work.
 
 ## Transport Binding {#transport-binding}
 
@@ -1064,33 +1032,34 @@ bootstrap.
 
 ### Track Organization {#track-organization}
 
-Each agent publishes on its own tracks, except for join tracks,
-which it publishes under the controller's `joins` namespace
-({{dialog-discovery}}). Other agents
-issue SUBSCRIBE_TRACKS on a peer's agent prefix to receive all tracks
-published by that peer, including dialog tracks. The relay handles
-fan-out to all subscribers via prefix matching. This per-agent
-publishing model ensures clear ownership and enables relay caching.
+Each agent publishes only under its own agent-id: its card and
+invitations under `("pace","agents",{agent-id})`, and its dialog
+tracks under `("pace","dialogs",{dialog-id},{agent-id})`. A
+participant issues SUBSCRIBE_TRACKS on the dialog prefix to receive
+the tracks of all participants. The relay handles fan-out to all
+subscribers via prefix matching. This publishing model ensures clear
+ownership and enables relay caching.
 
 Namespace structure and track names are defined in {{namespace}}.
 
 ### Message Serialization {#message-serialization}
 
 Each PACE object payload is one protocol message, with no PACE
-header: a control message ({{control-encoding}}) on `ctrl` and join
-tracks, and the protocol's native message on binding tracks. The
+header: a control message ({{control-encoding}}) on `ctrl` tracks, an
+invitation on invitation tracks, and the protocol's native message on
+binding tracks. The
 track namespace identifies the protocol, and MOQT carries the length.
 
 Payloads are uncompressed unless the participants agree on a
 `content_encoding` dialog parameter ({{dialog-parameters}}). It
-applies to binding tracks only, never to `ctrl` or join tracks.
+applies to binding tracks only, never to `ctrl` or invitation tracks.
 
 ## Dialog Operations over MOQT {#dialog-over-moqt}
 
 This section specifies how the operations of {{dialog-management}} are
 carried over MOQT. Each control message is one MOQT object on the
 sender's `ctrl` track under
-`("pace","agents",{agent-id},{dialog-id})`. MOQT control messages
+`("pace","dialogs",{dialog-id},{agent-id})`. MOQT control messages
 (PUBLISH, SUBSCRIBE, their responses, PUBLISH_DONE) establish and end
 the subscriptions that carry those objects. They are not dialog
 operations: PUBLISH_OK accepts a MOQT subscription, not a dialog, and a
@@ -1107,56 +1076,65 @@ or falls behind.
 
 ### Opening a Dialog {#opening}
 
-Prerequisite: both agents have already completed discovery Phase 2
-({{agent-discovery}}) and issued SUBSCRIBE_TRACKS on each other's
-agent prefix. The relay will then forward PUBLISH messages between
-them by prefix match.
+Prerequisite: B follows A ({{agent-discovery}}), or B learns the
+dialog-id out of band.
 
 Agent A (controller) opens a dialog with Agent B (invitee) as follows:
 
-1. A generates a dialog-id (UUID version 4).
+1. A generates a dialog-id (UUID version 4) and issues
+   SUBSCRIBE_TRACKS on the dialog prefix `("pace","dialogs",{dialog-id})`.
 
 2. A publishes OPEN on
-   `("pace","agents","agent-a",{dialog-id}) -- "ctrl"`. The context
+   `("pace","dialogs",{dialog-id},"agent-a") -- "ctrl"`. The context
    lists A as `active` and B as `invited`; `parameters` carries the
    proposed dialog parameters ({{dialog-parameters}}) and
    `credentials` carries A's identity assertion.
 
-3. The relay prefix-matches the new track against B's SUBSCRIBE_TRACKS
-   on `("pace","agents","agent-a")` and forwards the PUBLISH to B.
+3. A publishes an invitation for B on
+   `("pace","agents","agent-a","invites") -- "agent-b"`
+   ({{invitations}}). The relay forwards it to B, which subscribed
+   to that track when it started following A.
 
-4. B accepts the PUBLISH, which subscribes it to A's ctrl track. This
-   accepts the MOQT subscription only. B reads OPEN and decides
-   whether to join.
+4. B issues SUBSCRIBE on A's `ctrl` track,
+   `("pace","dialogs",{dialog-id},"agent-a") -- "ctrl"`. This is a
+   MOQT subscription only. B reads OPEN and decides whether to join.
 
 5. B publishes ACCEPT (or REJECT) on
-   `("pace","agents","agent-b",{dialog-id}) -- "ctrl"`, with the
-   accepted parameters and its own credentials.
+   `("pace","dialogs",{dialog-id},"agent-b") -- "ctrl"`, with the
+   accepted parameters and its own credentials. On accepting, B issues
+   SUBSCRIBE_TRACKS on `("pace","dialogs",{dialog-id})`.
 
-6. The relay prefix-matches the new track against A's SUBSCRIBE_TRACKS
-   on `("pace","agents","agent-b")` and forwards the PUBLISH to A.
+6. The relay forwards the new track to A through A's subscription to
+   the dialog prefix.
 
 7. A reads ACCEPT and publishes UPDATE at generation 1, with B marked
    `active` and the dialog state `active`.
 
 8. The dialog is active. Both agents can publish further tracks under
-   their dialog namespaces; the relay forwards each new PUBLISH to the
-   peer through the existing prefix subscriptions.
-
-A controller that is not discoverable, for example because it uses
-pairwise identifiers ({{poppy-binding}}), cannot rely on the invitee
-following its agent prefix. It still issues SUBSCRIBE_TRACKS on the
-invitee's agent prefix, and opens through the invitee's `joins`
-namespace ({{dialog-discovery}}): in step 2, it also publishes a track
-`("pace","discovery","joins",{invitee-id},{dialog-id}) --
-{controller-id}` whose first object is the same OPEN. When the invitee
-receives that track, it issues SUBSCRIBE_TRACKS on the controller's
-agent prefix, and the dialog continues from step 3.
+   their agent-id in the dialog namespace; the relay forwards each new
+   PUBLISH to every participant through its subscription to the
+   dialog prefix.
 
 Multi-party dialogs follow the same pattern: the controller invites
-participants in OPEN or a later UPDATE, and each invitee responds on
-its own `ctrl` track. A participant that discovers a dialog
-({{dialog-discovery}}) asks to join with JOIN_REQUEST.
+participants in OPEN or a later UPDATE, sends each an invitation, and
+each invitee responds on its own `ctrl` track. Participants already in
+the dialog receive a new participant's tracks without subscribing
+again.
+
+### Joining a Dialog {#joining}
+
+An agent that knows a dialog's dialog-id but was not invited asks to
+join by publishing JOIN_REQUEST on its own `ctrl` track,
+`("pace","dialogs",{dialog-id},{joiner-id}) -- "ctrl"`. The controller
+receives it through its subscription to the dialog prefix, validates
+the credentials, and decides whether to admit the joiner. The joiner
+subscribes to the controller's `ctrl` track to read the answer. To
+admit it, the controller invites the joiner with UPDATE, the joiner
+answers with ACCEPT and subscribes to the dialog prefix, and the
+controller's next UPDATE marks it `active`. A controller that declines
+answers with ERROR `policy-rejected`. Before admission, the joiner's
+authorization covers only publishing its own `ctrl` track and reading
+the controller's ({{relay-authorization}}).
 
 #### MOQT Setup Extensions {#moqt-setup-extensions}
 
@@ -1209,8 +1187,8 @@ PACE recovers from network and intermediary failures in several ways:
   through the QUIC idle timeout or a subscription timeout, an agent
   reconnects
   (to the same relay or an alternate one), re-issues PUBLISH_NAMESPACE
-  and SUBSCRIBE_TRACKS on its agent prefix, resubscribes to the
-  controller's `ctrl` track, and sends STATE_REQUEST with its last
+  on its agent namespace and SUBSCRIBE_TRACKS on the dialog prefix,
+  which includes the controller's `ctrl` track, and sends STATE_REQUEST with its last
   accepted generation. It applies the controller's STATE only after
   authenticating the controller and checking that the generation is not
   older than its last accepted one ({{generations}}). A join fetch from
@@ -1252,7 +1230,7 @@ sender publishes in the dialog and, optionally, a group on it:
 ~~~
 
 `namespace` lists the namespace fields that follow
-`("pace","agents",{agent-id},{dialog-id})`. Without `group`, all work
+`("pace","dialogs",{dialog-id},{agent-id})`. Without `group`, all work
 started by objects on the track is cancelled. Each receiver doing the
 affected work publishes CANCEL_ACK on its own `ctrl` track and stops
 publishing objects for that work, ending a track that carried only
@@ -1311,8 +1289,8 @@ ordered, and high-throughput reliable delivery semantics of
 
 ## Channel Architecture {#channels}
 
-Each modality maps to dedicated MOQT tracks within the Dialog
-Communication Namespace ({{namespace}}). Different modalities are
+Each modality maps to dedicated MOQT tracks within the dialog
+namespace ({{dialog-namespace}}). Different modalities are
 isolated by track name while sharing the dialog context and
 authorization.
 
@@ -1337,7 +1315,7 @@ subscriber priority:
 | 32-63 | Real-time Media | Voice/video frames |
 | 64-95 | Interactive | Chat messages, streaming LLM tokens |
 | 96-127 | Standard Operations | Tool calls, request/response |
-| 128-159 | Discovery | Capability cards, agent advertisements |
+| 128-159 | Discovery | Agent Cards, invitations |
 | 160-191 | Background | Telemetry, non-critical notifications |
 | 192-255 | Bulk Transfer | File transfers, documents |
 
@@ -1354,11 +1332,12 @@ Control tier.
 
 Request/response interactions use coordinated publish operations.
 Agent A publishes a request object on its own track
-`("pace","agents","agent-a",{dialog-id}) -- "ops/{req-id}"`. Agent B, which
-has subscribed to A's dialog namespace, receives the request, processes
-it, and publishes the response on its own corresponding track
-`("pace","agents","agent-b",{dialog-id}) -- "ops/{req-id}"`. Agent A receives
-the response through its subscription to B's dialog namespace.
+`("pace","dialogs",{dialog-id},"agent-a") -- "ops/{req-id}"`. Agent B,
+which has subscribed to the dialog prefix, receives the request,
+processes it, and publishes the response on its own corresponding track
+`("pace","dialogs",{dialog-id},"agent-b") -- "ops/{req-id}"`. Agent A
+receives the response through its own subscription to the dialog
+prefix.
 
 For a detailed example of request/response over MOQT tracks, see
 {{MCP-MOQT}} which defines this pattern for MCP tool invocations.
@@ -1406,10 +1385,9 @@ fan-out:
   per-subscriber state. Used for broadcast notifications and shared
   context distribution.
 * Multi-Party: All participants publish on their own tracks and
-  subscribe to each other's tracks within the same dialog-id. The
-  controller adds a participant with UPDATE; existing participants see
-  the new participant in the context and subscribe to its dialog
-  namespace.
+  subscribe to the dialog prefix. The controller adds a participant
+  with UPDATE; existing participants see the new participant in the
+  context and receive its tracks through their existing subscription.
 * Hierarchical Teams: A coordinator creates child PACE dialogs to
   delegate subtasks. Each level operates as a separate dialog with
   narrowed authorization scope, and each child's `parent_dialog_ids`
@@ -1525,7 +1503,7 @@ OPEN, and the invitee's ACCEPT carries a presentation bound to it,
 together with the invitee's own nonce. The controller then presents
 its credentials, bound to the invitee's nonce, in the UPDATE that
 marks the invitee `active`. A joiner and the controller do the same
-with JOIN_REQUEST, UPDATE, and ACCEPT ({{dialog-discovery}}). A
+with JOIN_REQUEST, UPDATE, and ACCEPT ({{joining}}). A
 participant that requires a key-bound presentation and does not
 receive one, or receives one that fails verification, MUST NOT treat
 the peer as authenticated.
@@ -1552,23 +1530,19 @@ agents MAY skip Phase 1 and proceed directly to Phase 2.
 
 ### Phase 2: Following an Agent
 
-Once Agent B knows Agent A's namespace prefix, B issues SUBSCRIBE_TRACKS
-on `("pace","agents","agent-a")`. From then on the relay forwards each
-PUBLISH from A that matches the prefix and that B is authorized to
-receive ({{relay-authorization}}): A's Agent Card, and the tracks of
-dialogs B is invited to or takes part in.
+Once Agent B knows Agent A's agent-id, B follows A with two
+subscriptions:
 
-1. B issues SUBSCRIBE_TRACKS on `("pace","agents","agent-a")`.
-2. The relay forwards A's PUBLISH for the `"card"` track to B.
-3. B accepts the PUBLISH, which implicitly subscribes it to the card
-   track, and reads A's Agent Card objects.
-4. When A later publishes tracks of a dialog that includes B under
-   `("pace","agents","agent-a",{dialog-id})`, the relay forwards them
-   to B by prefix match, so B learns of the dialog without a separate
-   notification mechanism.
+1. B issues SUBSCRIBE on `("pace","agents","agent-a") -- "card"` and
+   reads A's Agent Card ({{agent-card}}).
+2. B issues SUBSCRIBE on
+   `("pace","agents","agent-a","invites") -- "agent-b"`. When A
+   invites B to a dialog, the invitation arrives on this track
+   ({{invitations}}), and B then subscribes to the dialog.
 
-A does the same for B with SUBSCRIBE_TRACKS on
-`("pace","agents","agent-b")`.
+Following is B's choice: B follows the agents from which it is willing
+to receive invitations. Following does not show B any of A's dialogs.
+A follows B the same way when it expects invitations from B.
 
 ### Agent Card {#agent-card}
 
@@ -1615,7 +1589,7 @@ Over the MOQT binding, an application protocol's messages also need a
 place on MOQT tracks. This section defines that placement for MCP,
 the Personal Agent Protocol (Poppy), A2A, and a generic
 JSON-RPC baseline for custom protocols. Each binding runs inside a
-PACE dialog, using the Dialog Communication Namespace ({{namespace}})
+PACE dialog, using the dialog namespace ({{dialog-namespace}})
 and the channel architecture ({{data-exchange}}). Multiple bindings
 can coexist in a single dialog, each under its own protocol namespace
 field, so one agent can speak A2A to a peer and MCP to a tool in the
@@ -1673,16 +1647,16 @@ belongs in a protocol-specific document, such as {{MCP-MOQT}} for MCP.
 Protocols use distinct protocol namespace fields within PACE dialogs.
 In the tables of this section, a pattern such as
 `("a2a", "task") -- {task-id}` gives the namespace fields that follow
-`("pace", "agents", {agent-id}, {dialog-id})`, then the track name.
+`("pace", "dialogs", {dialog-id}, {agent-id})`, then the track name.
 
 In the examples, D is the dialog-id.
 
-| Protocol | Protocol Fields | Example Full Track Name |
+| Binding | Protocol Fields | Example Full Track Name |
 |----------|--------------|-------------------|
-| MCP | `"mcp"` | `("pace","agents","fs-server",D,"mcp","tools","read") -- "response"` |
-| Poppy | `"poppy"` | `("pace","agents","acme",D,"poppy","conversation") -- "events"` |
-| A2A | `"a2a"` | `("pace","agents","agent-a",D,"a2a","task") -- "t1"` |
-| Generic | `"ext", {proto}` | `("pace","agents","agent-a",D,"ext","myproto","rpc") -- "call"` |
+| MCP | `"mcp"` | `("pace","dialogs",D,"fs","mcp","tools","read") -- "response"` |
+| Poppy | `"poppy"` | `("pace","dialogs",D,"acme","poppy","conversation") -- "events"` |
+| A2A | `"a2a"` | `("pace","dialogs",D,"agent-a","a2a","task") -- "t1"` |
+| Generic | `"ext", {proto}` | `("pace","dialogs",D,"agent-a","ext","proto","rpc") -- "call"` |
 
 ## MCP Binding {#mcp-binding}
 
@@ -1692,7 +1666,7 @@ namespace field after the dialog-id, under the namespace of the agent
 that publishes the track:
 
 ~~~
-Namespace: ("pace", "agents", {agent-id}, {dialog-id}, "mcp",
+Namespace: ("pace", "dialogs", {dialog-id}, {agent-id}, "mcp",
             {category}, ...)
 Tracks:    {track-name}
 ~~~
@@ -1701,8 +1675,8 @@ The complete MCP over MOQT specification, covering track structure,
 operation mapping, message serialization, Agent Skills, and relay
 support, is defined in {{MCP-MOQT}}. PACE adopts its track semantics.
 The mapping is mechanical: the leading `(mcp, {session-id})` fields of
-an MCP over MOQT namespace are replaced by `("pace", "agents",
-{agent-id}, {dialog-id}, "mcp")`, and the remaining namespace fields
+an MCP over MOQT namespace are replaced by `("pace", "dialogs",
+{dialog-id}, {agent-id}, "mcp")`, and the remaining namespace fields
 and the track name are kept unchanged. For example:
 
 ~~~
@@ -1711,18 +1685,18 @@ MCP over MOQT:
   (mcp, {session-id}, tools, {tool-name}) -- response
   (mcp, {session-id}, resources) -- {resource-uri}
 Within PACE:
-  ("pace","agents",{client-id},{dialog-id},"mcp","tools",{tool-name})
-      -- "request"
-  ("pace","agents",{server-id},{dialog-id},"mcp","tools",{tool-name})
-      -- "response"
-  ("pace","agents",{server-id},{dialog-id},"mcp","resources")
+  ("pace","dialogs",{dialog-id},{client-id},"mcp","tools",
+   {tool-name}) -- "request"
+  ("pace","dialogs",{dialog-id},{server-id},"mcp","tools",
+   {tool-name}) -- "response"
+  ("pace","dialogs",{dialog-id},{server-id},"mcp","resources")
       -- {resource-uri}
 ~~~
 
 
 The standalone MCP session discovery flow of {{MCP-MOQT}} is not used
 within PACE: PACE supplies the dialog-id, and peers learn each
-other's MCP tracks through SUBSCRIBE_TRACKS on the agent prefix.
+other's MCP tracks through SUBSCRIBE_TRACKS on the dialog prefix.
 
 MCP messages keep their native JSON-RPC format as the object payload
 ({{message-serialization}}) and carry the dialog reference in `_meta`
@@ -1785,6 +1759,7 @@ default `poppy` HTTPS entry:
       {
         "type": "pace",
         "binding": "poppy",
+        "endpoint": "https://acme.example/poppy/pace",
         "relayEndpoint": "moqt://relay.acme.example:4443",
         "namespace": ["pace", "agents", "acme"]
       }
@@ -1797,7 +1772,9 @@ The `pace` protocol type is not defined by Poppy Draft 0.3. Until Poppy
 defines it, the entry is carried as a Poppy extension named under a
 domain the publisher controls, as Poppy's extension rules require.
 The Personal Agent MUST apply Poppy's `poppy.json` validation (domain
-match and issuer checks) before using the entry.
+match and issuer checks) before using the entry. `namespace` is the
+Company Agent's agent namespace, and `endpoint` is the HTTPS URL at
+which the Personal Agent starts a conversation (see below).
 
 A Company that holds a Company SD-Card ({{Section 8.3 of SD-CARD}})
 carries the `agent` member of its `poppy.json` in the SD-Card's
@@ -1810,7 +1787,7 @@ require.
 ### Namespace Structure
 
 ~~~
-Namespace: ("pace", "agents", {agent-id}, {dialog-id}, "poppy",
+Namespace: ("pace", "dialogs", {dialog-id}, {agent-id}, "poppy",
             "conversation")
 Tracks:    "messages" | "requests" | "events" | "deltas"
 ~~~
@@ -1822,8 +1799,8 @@ Tracks:    "messages" | "requests" | "events" | "deltas"
 | Company Agent | `events` | Poppy events: `message`, `state`, `authorization`, `user_requested`, `direct_opened`, `direct_closed` |
 | Company Agent | `deltas` | Non-durable `text-delta` events |
 
-The Company Agent's `{agent-id}` is the namespace advertised in
-`poppy.json`. The Personal Agent's `{agent-id}` MUST be pairwise: it
+The Company Agent's `{agent-id}` is the one in the namespace advertised
+in `poppy.json`. The Personal Agent's `{agent-id}` MUST be pairwise: it
 MUST differ for each Company, MUST NOT be derived from the person's
 identity, and SHOULD NOT equal the Poppy User ID. A Personal Agent MAY
 use a fresh `{agent-id}` for each dialog. This preserves Poppy's
@@ -1831,9 +1808,25 @@ property that a Company knows a person only by an opaque identifier
 that differs at every Company. It also stops relays, which always see
 namespaces, from linking a person's conversations across Companies.
 Personal Agents do not publish an Agent Card or answer agent discovery
-({{agent-discovery}}). The Company is the discoverable party, so the
-Personal Agent opens dialogs through the Company Agent's `joins`
-namespace ({{opening}}).
+({{agent-discovery}}), and the Company does not follow them.
+
+### Starting a Conversation
+
+The Company does not follow the Personal Agent, so the Personal Agent
+gives it the dialog-id over HTTPS ({{invitations}}):
+
+1. The Personal Agent generates a dialog-id and sends a POST request
+   to `endpoint` with the Poppy-Session header, as for every endpoint
+   a Poppy extension defines, and the body `{"dialog_id": "<D>",
+   "agent_id": "<pairwise agent-id>"}`.
+2. The Company verifies the Session JWT, issues SUBSCRIBE_TRACKS on
+   `("pace","dialogs",D)`, and responds with a token {{MoQ-C4M}}
+   that authorizes the Personal Agent for that dialog only
+   ({{relay-authorization}}).
+3. The Personal Agent connects to `relayEndpoint`, subscribes to the
+   dialog prefix, and publishes OPEN on its `ctrl` track, with itself
+   as controller and the Company Agent invited ({{opening}}). The
+   dialog continues as in {{opening}} from step 5.
 
 ### Operation Mapping
 
@@ -1843,7 +1836,7 @@ carried in them, because the dialog-id is in every track namespace.
 
 | Poppy Conversations | PACE / MOQT |
 |---------------------|-------------|
-| Start a conversation | OPEN through the Company Agent's `joins` namespace ({{opening}}), with the Personal Agent as controller. The Poppy conversation ID is assigned as in Poppy and is distinct from the dialog-id |
+| Start a conversation | The dialog-id handoff over HTTPS, then OPEN with the Personal Agent as controller (see above). The Poppy conversation ID is assigned as in Poppy and is distinct from the dialog-id |
 | Send a message | One object per message, in a new group, on the `messages` track |
 | Read events, resume from a cursor | SUBSCRIBE to the `events` track, with FILL_PARAMETERS or FETCH from the Location after the last event received |
 | Request a human | A `handoff` object on the `requests` track |
@@ -1872,10 +1865,9 @@ Sign-in, token refresh, and client metadata stay on HTTPS.
   that opened it. The Company MUST reject control messages from any
   other client, User, or account, and MUST authorize subscriptions to
   the conversation's `events` and `deltas` tracks only for that owner.
-  Because the relay forwards these tracks to every agent following
-  the Company Agent's prefix, the relay enforces this
-  ({{relay-authorization}}): only the owner's token covers
-  `("pace","agents",{company-id},{dialog-id})`.
+  The relay enforces this ({{relay-authorization}}): the only
+  participant token the Company issues for `("pace","dialogs",D)` is
+  the owner's.
 * Signing in: When the Company Agent needs account access, it publishes
   an `authorization` event; the Personal Agent signs in over HTTPS and
   continues the same dialog with new credentials. Because control
@@ -1955,7 +1947,7 @@ A protocol without its own binding uses the `"ext"` protocol namespace
 field followed by a field naming the protocol:
 
 ~~~
-Namespace: ("pace", "agents", {agent-id}, {dialog-id}, "ext",
+Namespace: ("pace", "dialogs", {dialog-id}, {agent-id}, "ext",
             {protocol-name}, ...)
 Tracks:    {identifier}
 ~~~
@@ -2016,37 +2008,41 @@ content unless the deployment explicitly trusts them to.
 
 ### Relay Authorization {#relay-authorization}
 
-Following an agent ({{agent-discovery}}) subscribes to its whole
-prefix, so without further checks the relay would forward every
-dialog track the agent publishes to every follower, including
-dialogs the follower is not part of. The relay therefore checks each
-track it forwards for a SUBSCRIBE_TRACKS against the subscriber's
-token, not only the subscribed prefix, and forwards only tracks the
-token covers.
-
-The `moqt` claim of a Common Access Token matches each Track
-Namespace field exactly or by prefix {{MoQ-C4M}}, so a token can be
-scoped to a dialog without a new claim:
+Every PACE subscription is either to one track or to one dialog's
+prefix, so the relay authorizes it against the subscriber's token when
+the subscription is made, and everything it then forwards is covered.
+The `moqt` claim of a Common Access Token matches each Track Namespace
+field exactly or by prefix {{MoQ-C4M}}, so the scopes PACE needs are
+expressed without a new claim. For agent B:
 
 ~~~
-Follow agent A (card only):
-  [[SUBSCRIBE_NAMESPACE, SUBSCRIBE],
-   ["pace","agents","agent-a",nil], "card"]
-Participate in dialog D of agent A:
-  [[SUBSCRIBE, FETCH],
-   ["pace","agents","agent-a",D]]
+Follow agent A:
+  [[SUBSCRIBE], ["pace","agents","agent-a",nil], "card"]
+  [[SUBSCRIBE], ["pace","agents","agent-a","invites",nil], "agent-b"]
+Participate in dialog D (invited or admitted):
+  [[SUBSCRIBE, FETCH], ["pace","dialogs",D]]
+  [[PUBLISH], ["pace","dialogs",D,"agent-b"]]
+Ask to join dialog D controlled by A (until admitted):
+  [[SUBSCRIBE], ["pace","dialogs",D,"agent-a",nil], "ctrl"]
+  [[PUBLISH], ["pace","dialogs",D,"agent-b",nil], "ctrl"]
 ~~~
 
-A controller, or the authorization server it relies on, issues a
-token scoped to a dialog when it invites or admits a participant,
-since an invitee reads the controller's `ctrl` track before it
-accepts, and stops
-revalidating it ({{Section 2.2 of MoQ-C4M}}) when the participant
-leaves or is removed.
+The PUBLISH scopes ensure that an agent publishes only under its own
+agent-id. A controller, or the authorization server it relies on,
+issues the participant scope when it invites or admits an agent, and
+stops revalidating it ({{Section 2.2 of MoQ-C4M}}) when the
+participant leaves or is revoked. How the token reaches the agent is
+deployment-specific; the Poppy binding returns it over HTTPS
+({{poppy-binding}}).
 
-Editor's note: {{MoQ-C4M}} defines no action for SUBSCRIBE_TRACKS
-and does not yet say that a relay checks each forwarded track against
-the token. Both are to be raised with its authors.
+A subscription to `("pace","dialogs")`, or to any prefix of it shorter
+than a dialog-id, would reveal every dialog on the relay. Relays MUST
+refuse SUBSCRIBE_NAMESPACE and SUBSCRIBE_TRACKS on such a prefix unless
+the subscriber's token explicitly covers it.
+
+Editor's note: {{MoQ-C4M}} defines no action for SUBSCRIBE_TRACKS,
+which a participant uses on the dialog prefix. This is to be raised
+with its authors.
 
 ## Privacy Considerations {#privacy}
 
@@ -2123,10 +2119,12 @@ The examples below share these conventions:
 
 * `D1` to `D7` stand for dialog-ids (UUIDs). `A`, `B`, and `C` are
   agents with agent-ids `agent-a`, `agent-b`, and `agent-c`.
-* Before each example, every agent has completed agent discovery
-  ({{agent-discovery}}) and holds SUBSCRIBE_TRACKS on each peer's
-  agent prefix. The relay therefore forwards every new track to the
-  peers, and the steps do not repeat the relay hops.
+* Before each example, every agent follows the others
+  ({{agent-discovery}}). Each invitee learns the dialog-id from an
+  invitation ({{invitations}}), and every participant holds
+  SUBSCRIBE_TRACKS on the dialog prefix. The relay therefore forwards
+  every new dialog track to the participants, and the steps do not
+  repeat the invitations or relay hops.
 * Each example lists the tracks by publisher, then the steps. `gen`
   is the dialog generation after a controller operation.
 
@@ -2137,18 +2135,20 @@ lifecycle; the later examples abbreviate it.
 
 ~~~
 A publishes:
-  ("pace","agents","agent-a",D1) -- "ctrl"         OPEN, UPDATE,
+  ("pace","dialogs",D1,"agent-a") -- "ctrl"        OPEN, UPDATE,
                                                    TERMINATE
-  ("pace","agents","agent-a",D1,"a2a","request") -- "r1"
+  ("pace","dialogs",D1,"agent-a","a2a","request") -- "r1"
                                                    task request
 B publishes:
-  ("pace","agents","agent-b",D1) -- "ctrl"         ACCEPT
-  ("pace","agents","agent-b",D1,"a2a","response") -- "r1"
+  ("pace","dialogs",D1,"agent-b") -- "ctrl"        ACCEPT
+  ("pace","dialogs",D1,"agent-b","a2a","response") -- "r1"
                                                    task result
 ~~~
 
-1. A publishes OPEN on its `ctrl` track (gen 0, B `invited`).
-2. B publishes ACCEPT on its own `ctrl` track.
+1. A publishes OPEN on its `ctrl` track (gen 0, B `invited`) and an
+   invitation on `("pace","agents","agent-a","invites") -- "agent-b"`.
+2. B reads OPEN on A's `ctrl` track and publishes ACCEPT on its own
+   `ctrl` track.
 3. A publishes UPDATE (gen 1, B `active`). The dialog is active.
 4. A publishes the A2A request on its `request` track `r1`:
    `{"jsonrpc":"2.0","method":"SendMessage","params":{...},"id":"r1"}`,
@@ -2163,12 +2163,12 @@ A reads a file through an MCP server, `fs-tool`.
 
 ~~~
 A publishes:
-  ("pace","agents","agent-a",D2) -- "ctrl"
-  ("pace","agents","agent-a",D2,"mcp","tools","readFile")
+  ("pace","dialogs",D2,"agent-a") -- "ctrl"
+  ("pace","dialogs",D2,"agent-a","mcp","tools","readFile")
       -- "request"                                 tools/call
 fs-tool publishes:
-  ("pace","agents","fs-tool",D2) -- "ctrl"
-  ("pace","agents","fs-tool",D2,"mcp","tools","readFile")
+  ("pace","dialogs",D2,"fs-tool") -- "ctrl"
+  ("pace","dialogs",D2,"fs-tool","mcp","tools","readFile")
       -- "response"                                result
 ~~~
 
@@ -2194,7 +2194,7 @@ dialog `D3`.
    soon as it is published.
 3. To cancel, A publishes `notifications/cancelled` on its MCP control
    track,
-   `("pace","agents","agent-a",D3,"mcp","control") -- "client-to-server"`
+   `("pace","dialogs",D3,"agent-a","mcp","control") -- "client-to-server"`
    {{MCP-MOQT}}. code-tool stops and publishes no further objects in
    Group 5.
 
@@ -2214,19 +2214,19 @@ speaking and cancel the tool call at once.
 
 ~~~
 U publishes:
-  ("pace","agents","user-u",D5) -- "ctrl"          ACCEPT
-  ("pace","agents","user-u",D5) -- "audio"         microphone
+  ("pace","dialogs",D5,"user-u") -- "ctrl"         ACCEPT
+  ("pace","dialogs",D5,"user-u") -- "audio"        microphone
 V publishes:
-  ("pace","agents","agent-v",D5) -- "ctrl"         OPEN, UPDATE,
+  ("pace","dialogs",D5,"agent-v") -- "ctrl"        OPEN, UPDATE,
                                                    CANCEL
-  ("pace","agents","agent-v",D5) -- "audio"        speech
-  ("pace","agents","agent-v",D5) -- "chat"         reply text
-  ("pace","agents","agent-v",D5,"mcp","tools","search")
+  ("pace","dialogs",D5,"agent-v") -- "audio"       speech
+  ("pace","dialogs",D5,"agent-v") -- "chat"        reply text
+  ("pace","dialogs",D5,"agent-v","mcp","tools","search")
       -- "request"                                 tools/call
 search-tool publishes:
-  ("pace","agents","search-tool",D5) -- "ctrl"     ACCEPT,
+  ("pace","dialogs",D5,"search-tool") -- "ctrl"    ACCEPT,
                                                    CANCEL_ACK
-  ("pace","agents","search-tool",D5,"mcp","tools","search")
+  ("pace","dialogs",D5,"search-tool","mcp","tools","search")
       -- "response"                                results
 ~~~
 
@@ -2267,22 +2267,22 @@ A coordinates research by B, a web researcher, and C, a data analyst.
 
 ~~~
 A publishes:
-  ("pace","agents","agent-a",D4) -- "ctrl"         OPEN, UPDATE,
+  ("pace","dialogs",D4,"agent-a") -- "ctrl"        OPEN, UPDATE,
                                                    TERMINATE
-  ("pace","agents","agent-a",D4) -- "chat"         assignments
+  ("pace","dialogs",D4,"agent-a") -- "chat"        assignments
 B publishes:
-  ("pace","agents","agent-b",D4) -- "ctrl"         ACCEPT
-  ("pace","agents","agent-b",D4) -- "chat"         status
-  ("pace","agents","agent-b",D4,"a2a","task") -- "research-1"
+  ("pace","dialogs",D4,"agent-b") -- "ctrl"        ACCEPT
+  ("pace","dialogs",D4,"agent-b") -- "chat"        status
+  ("pace","dialogs",D4,"agent-b","a2a","task") -- "research-1"
                                                    findings
 C publishes:
-  ("pace","agents","agent-c",D4) -- "ctrl"         ACCEPT
-  ("pace","agents","agent-c",D4) -- "chat"         status
-  ("pace","agents","agent-c",D4,"a2a","task") -- "analysis-1"
+  ("pace","dialogs",D4,"agent-c") -- "ctrl"        ACCEPT
+  ("pace","dialogs",D4,"agent-c") -- "chat"        status
+  ("pace","dialogs",D4,"agent-c","a2a","task") -- "analysis-1"
                                                    results
 ~~~
 
-Because each agent follows the others' agent prefixes, every agent
+Because each participant subscribes to the dialog prefix, every agent
 receives every other agent's tracks in `D4`; no per-track
 subscriptions are needed.
 
@@ -2308,16 +2308,16 @@ name, and each AutoGen message carries the dialog reference in its
 
 ~~~
 R publishes:
-  ("pace","agents","runtime-r",D6) -- "ctrl"       OPEN, UPDATE,
+  ("pace","dialogs",D6,"runtime-r") -- "ctrl"      OPEN, UPDATE,
                                                    TERMINATE
-  ("pace","agents","runtime-r",D6,"ext","autogen") -- "conv1"
+  ("pace","dialogs",D6,"runtime-r","ext","autogen") -- "conv1"
                                                    R's agents' turns
 H publishes:
-  ("pace","agents","user-h",D6) -- "ctrl"          ACCEPT
-  ("pace","agents","user-h",D6) -- "chat"          human input
+  ("pace","dialogs",D6,"user-h") -- "ctrl"         ACCEPT
+  ("pace","dialogs",D6,"user-h") -- "chat"         human input
 B publishes:
-  ("pace","agents","agent-b",D6) -- "ctrl"         ACCEPT
-  ("pace","agents","agent-b",D6,"ext","autogen") -- "conv1"
+  ("pace","dialogs",D6,"agent-b") -- "ctrl"        ACCEPT
+  ("pace","dialogs",D6,"agent-b","ext","autogen") -- "conv1"
                                                    B's turns
 ~~~
 
