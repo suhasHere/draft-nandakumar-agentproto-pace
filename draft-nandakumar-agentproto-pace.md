@@ -6,7 +6,6 @@ category: std
 docname: draft-nandakumar-agentproto-pace-latest
 submissiontype: IETF
 number:
-date: 2026-06-28
 consensus: true
 v: 3
 area: "Applications and Real-Time"
@@ -39,7 +38,6 @@ author:
 
 normative:
   RFC2119:
-  RFC8126:
   RFC8174:
   RFC9000:
   RFC8446:
@@ -67,8 +65,6 @@ informative:
   RFC7519:
   RFC8693:
   RFC9635:
-  RFC7540:
-  RFC9110:
   RFC9297:
   RFC9449:
   RFC9576:
@@ -397,7 +393,7 @@ ones, are left to the application.
 
 This document specifies a MOQT binding for exchanging dialogs. Media
 over QUIC Transport (MOQT) {{MoQ-TRANSPORT}} is a publish/subscribe
-protocol over QUIC. It meets each requirement in
+protocol over QUIC {{RFC9000}}. It meets each requirement in
 {{transport-requirements}} with a transport mechanism, so agent
 protocols do not need to rebuild them.
 
@@ -1068,7 +1064,9 @@ bootstrap.
 
 ### Track Organization {#track-organization}
 
-Each agent publishes exclusively on its own tracks. Other agents
+Each agent publishes on its own tracks, except for join tracks,
+which it publishes under the controller's `joins` namespace
+({{dialog-discovery}}). Other agents
 issue SUBSCRIBE_TRACKS on a peer's agent prefix to receive all tracks
 published by that peer, including dialog tracks. The relay handles
 fan-out to all subscribers via prefix matching. This per-agent
@@ -1435,8 +1433,9 @@ credential an agent presents in the `credentials` member of the
 control message it uses to open, accept, or join a dialog
 ({{control-encoding}}) identifies:
 
-* the agent, by an identifier that matches its participant identifier
-  in the dialog;
+* the agent, by its participant identifier in the dialog or by an
+  identifier that the protocol binding relates to it, such as the
+  Poppy `client_id` ({{poppy-binding}});
 * the user, workload, or organization the agent acts for; and
 * when the agent acts for another agent, the delegation chain
   ({{delegation}}).
@@ -1495,11 +1494,11 @@ the principal.
 Agents SHOULD support selective disclosure so they reveal only what
 each peer requires.
 
-For agent metadata, PACE uses SD-Card {{SD-CARD}}: an Agent Registry
-attests the agent's metadata once, and the agent discloses to each
-peer only the claims that peer is authorized to see, while the peer
-can check that each disclosed claim is issuer-attested and unmodified.
-Agent Cards ({{agent-card}}) are presented this way. Identity
+For agent metadata, SD-Card {{SD-CARD}} provides this: an Agent
+Registry attests the agent's metadata once, and the agent discloses to
+each peer only the claims that peer is authorized to see, while the
+peer can check that each disclosed claim is issuer-attested and
+unmodified. An Agent Card ({{agent-card}}) can be an SD-Card. Identity
 assertions and authorization proofs in `credentials` use the selective
 disclosure features of the mechanism in use ({{identity-formats}}).
 
@@ -1554,18 +1553,19 @@ agents MAY skip Phase 1 and proceed directly to Phase 2.
 ### Phase 2: Following an Agent
 
 Once Agent B knows Agent A's namespace prefix, B issues SUBSCRIBE_TRACKS
-on `("pace","agents","agent-a")`. From then on the relay forwards every
-PUBLISH from A that matches the prefix, which covers A's Agent Card and
-any future dialog tracks A publishes.
+on `("pace","agents","agent-a")`. From then on the relay forwards each
+PUBLISH from A that matches the prefix and that B is authorized to
+receive ({{relay-authorization}}): A's Agent Card, and the tracks of
+dialogs B is invited to or takes part in.
 
 1. B issues SUBSCRIBE_TRACKS on `("pace","agents","agent-a")`.
 2. The relay forwards A's PUBLISH for the `"card"` track to B.
 3. B accepts the PUBLISH, which implicitly subscribes it to the card
    track, and reads A's Agent Card objects.
-4. When A later publishes dialog tracks under
+4. When A later publishes tracks of a dialog that includes B under
    `("pace","agents","agent-a",{dialog-id})`, the relay forwards them
-   to B by prefix match. B discovers and joins dialogs without any
-   separate notification mechanism.
+   to B by prefix match, so B learns of the dialog without a separate
+   notification mechanism.
 
 A does the same for B with SUBSCRIBE_TRACKS on
 `("pace","agents","agent-b")`.
@@ -1583,33 +1583,24 @@ All Agent Cards MUST include:
 * Authentication schemes
 * Identity claims (issuer, public key, expiration)
 
-PACE does not define its own card format. An Agent Card SHOULD be the
-SD-Card {{SD-CARD}} of the agent's application protocol, such as an
-A2A SD-Card ({{a2a-binding}}), whose `vct` claim identifies the
-protocol binding. The SD-Card's core claims carry the identity claims
-and display name, and its binding claims carry the modalities,
-protocols, and authentication schemes. The card discloses the agent's
-PACE entry point in the protocol's own metadata (for A2A, an element
-of `supportedInterfaces`), and that entry names the agent's namespace
-`("pace","agents",{agent-id})`. Receivers MUST check that this
-namespace equals the one on which the card was published.
+PACE does not define a card format. An Agent Card is the agent's
+application protocol metadata in a signed form, such as an A2A Agent
+Card ({{a2a-binding}}) or an SD-Card {{SD-CARD}}, which lets the agent
+disclose different claims to different peers. The card names the
+agent's namespace `("pace","agents",{agent-id})`, and receivers MUST
+check that it equals the namespace on which the card was published.
 
-The `"card"` track is delivered through relays to every subscriber,
-so its objects cannot be bound to one verifier. An Agent Card on the
-track is a presentation for the `public` discovery context without a
-Key Binding JWT ({{Section 5.3 of SD-CARD}}). Receivers MUST verify
-it as {{Section 6.3 of SD-CARD}} requires, apart from key binding,
-before acting on its claims. Such a card proves that its claims are
-attested and unmodified, but not that the publisher is the agent. A
-participant that relies on the agent's identity MUST obtain a
-key-bound presentation in `credentials` when the dialog opens or the
-agent joins ({{key-binding}}); that presentation MAY disclose claims
-of a richer discovery context the participant is authorized for.
+The `"card"` track reaches every subscriber through relays, so a card
+on it is not bound to any one verifier. It shows that its claims are
+signed and unmodified, but not that the publisher is the agent.
+Receivers MUST verify the card's signature and expiration before
+acting on its claims, and a participant that relies on the agent's
+identity MUST obtain a key-bound presentation in `credentials`
+({{key-binding}}).
 
-An SD-Card's `sub` is stable across issuances. An agent that uses
-pairwise or per-dialog agent-ids ({{privacy}}) uses a separate
-SD-Card, with a separate `cnf` key, for each agent-id it presents
-({{Section 4 of SD-CARD}}); otherwise the `sub` links its agent-ids.
+Every subscriber sees the card, so an agent that uses pairwise or
+per-dialog agent-ids ({{privacy}}) publishes a separate card, with a
+separate key, for each agent-id; otherwise the card links them.
 
 # Protocol Bindings {#protocol-bindings}
 
@@ -1650,7 +1641,7 @@ the full context sends STATE_REQUEST.
 
 | Protocol | Carried in | Keep distinct from |
 |---|---|---|
-| MCP | `_meta` | MCP session and JSON-RPC request IDs |
+| MCP | `_meta` | JSON-RPC request IDs and the {{MCP-MOQT}} session-id |
 | Poppy | Track namespace ({{poppy-binding}}) | Conversation ID |
 | AutoGen | Message `metadata` | Conversation ID |
 | A2A | Message `metadata` | `contextId`, `taskId` |
@@ -1672,12 +1663,12 @@ A binding specifies:
 * Dialog reference: where messages carry the dialog reference
   ({{carrying-dialog-context}}).
 * Priority: which PACE priority tier its tracks use ({{data-exchange}}).
-
-A complete mapping of each protocol operation to MOQT primitives
-belongs in a protocol-specific document, such as {{MCP-MOQT}} for MCP.
 * Identity and authorization: how the protocol's own identity and
   authorization constructs (if any) relate to the credential
   mechanisms ({{identity-formats}}) in this document.
+
+A complete mapping of each protocol operation to MOQT primitives
+belongs in a protocol-specific document, such as {{MCP-MOQT}} for MCP.
 
 Protocols use distinct protocol namespace fields within PACE dialogs.
 In the tables of this section, a pattern such as
@@ -1750,13 +1741,12 @@ MCP tracks use the Standard Operations priority tier
 An MCP server that holds an MCP SD-Card returns a key-bound
 presentation to the client that requests one
 ({{Section 8.2.4 of SD-CARD}}). That presentation is specific to the
-requesting client, and MCP requires the response carrying it not to
-be shared with other clients. Within PACE, the response track is
-scoped to the dialog, and relays MUST NOT serve objects of a dialog's
-tracks to subscribers outside that dialog. The nonce and audience
-prevent replay of the presentation, but other participants of the
-dialog can read the claims it discloses, so the server discloses only
-claims that every participant may see.
+requesting client, and SD-Card requires the response carrying it to
+have a private `cacheScope`. Within PACE, relay authorization keeps
+the response track within the dialog ({{relay-authorization}}). The
+nonce and audience prevent replay of the presentation, but other
+participants of the dialog can read the claims it discloses, so the
+server discloses only claims that every participant may see.
 
 When a Key Binding JWT carries an `interaction_id`, an agent includes
 it in the MCP requests it makes for that interaction
@@ -1993,8 +1983,9 @@ holds scope S, it can request a sub-scope S' ⊂ S for Agent B, and B
 can narrow again to S'' ⊂ S' for a downstream tool. No agent down
 the chain may hold more than its delegator granted.
 
-Authorization proofs travel in the `credentials` member of OPEN,
-ACCEPT, and JOIN_REQUEST. The receiver validates the proof together
+Authorization proofs travel in the `credentials` member of control
+messages: OPEN, ACCEPT, and JOIN_REQUEST, and UPDATE when the
+controller presents its own ({{key-binding}}). The receiver validates the proof together
 with the full delegation chain ({{delegation}}). Proofs are refreshed
 before they expire by sending new credentials on a later control
 message; long-lived dialogs SHOULD renew the proof in place rather
@@ -2047,7 +2038,9 @@ Participate in dialog D of agent A:
 ~~~
 
 A controller, or the authorization server it relies on, issues a
-token scoped to a dialog when it admits a participant, and stops
+token scoped to a dialog when it invites or admits a participant,
+since an invitee reads the controller's `ctrl` track before it
+accepts, and stops
 revalidating it ({{Section 2.2 of MoQ-C4M}}) when the participant
 leaves or is removed.
 
@@ -2066,10 +2059,8 @@ management protocol. Deployments mitigate it as follows:
 
 * Identity claims and agent metadata are disclosed selectively
   ({{selective-disclosure}}): agents reveal only what each peer
-  needs. Selective disclosure does not hide the agent's identity:
-  an SD-Card's `sub` and `cnf` key link every presentation of it,
-  so an agent that uses pairwise agent-ids uses a separate SD-Card
-  for each ({{agent-card}}).
+  needs. Selective disclosure does not hide the agent's identity
+  ({{agent-card}}).
 * Authorization proofs are narrowed to the minimum scope and
   refreshed before expiration so intermediaries cannot replay broad
   grants.
@@ -2130,7 +2121,7 @@ TODO
 
 The examples below share these conventions:
 
-* `D1` to `D5` stand for dialog-ids (UUIDs). `A`, `B`, and `C` are
+* `D1` to `D7` stand for dialog-ids (UUIDs). `A`, `B`, and `C` are
   agents with agent-ids `agent-a`, `agent-b`, and `agent-c`.
 * Before each example, every agent has completed agent discovery
   ({{agent-discovery}}) and holds SUBSCRIBE_TRACKS on each peer's
@@ -2160,7 +2151,7 @@ B publishes:
 2. B publishes ACCEPT on its own `ctrl` track.
 3. A publishes UPDATE (gen 1, B `active`). The dialog is active.
 4. A publishes the A2A request on its `request` track `r1`:
-   `{"jsonrpc":"2.0","method":"message/send","params":{...},"id":"r1"}`,
+   `{"jsonrpc":"2.0","method":"SendMessage","params":{...},"id":"r1"}`,
    with the dialog reference in the message `metadata`
    ({{carrying-dialog-context}}).
 5. B publishes the result on its `response` track `r1`.
@@ -2317,27 +2308,27 @@ name, and each AutoGen message carries the dialog reference in its
 
 ~~~
 R publishes:
-  ("pace","agents","runtime-r",D5) -- "ctrl"       OPEN, UPDATE,
+  ("pace","agents","runtime-r",D6) -- "ctrl"       OPEN, UPDATE,
                                                    TERMINATE
-  ("pace","agents","runtime-r",D5,"ext","autogen") -- "conv1"
+  ("pace","agents","runtime-r",D6,"ext","autogen") -- "conv1"
                                                    R's agents' turns
 H publishes:
-  ("pace","agents","user-h",D5) -- "ctrl"          ACCEPT
-  ("pace","agents","user-h",D5) -- "chat"          human input
+  ("pace","agents","user-h",D6) -- "ctrl"          ACCEPT
+  ("pace","agents","user-h",D6) -- "chat"          human input
 B publishes:
-  ("pace","agents","agent-b",D5) -- "ctrl"         ACCEPT
-  ("pace","agents","agent-b",D5,"ext","autogen") -- "conv1"
+  ("pace","agents","agent-b",D6) -- "ctrl"         ACCEPT
+  ("pace","agents","agent-b",D6,"ext","autogen") -- "conv1"
                                                    B's turns
 ~~~
 
-1. R opens `D5` (gen 0, H and B `invited`), and commits both ACCEPTs in
+1. R opens `D6` (gen 0, H and B `invited`), and commits both ACCEPTs in
    one UPDATE (gen 1).
 2. R's group chat manager picks the next speaker, as AutoGen does. The
    speaker's message goes out once on its publisher's `conv1` track,
    and the relay delivers it to every other participant.
 3. When the manager asks the human, H answers on `chat`.
-4. For a nested chat, R opens a child dialog `D6` whose
-   `parent_dialog_ids` is `[D5]`, and posts its result back in `D5`.
+4. For a nested chat, R opens a child dialog `D7` whose
+   `parent_dialog_ids` is `[D6]`, and posts its result back in `D6`.
 5. R publishes TERMINATE (gen 2) when the chat ends.
 
 # Acknowledgments
