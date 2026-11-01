@@ -727,7 +727,7 @@ and gives one of the reasons below or in the rules above.
   or an operation MUST NOT reinterpret it. It responds with ERROR,
   giving `unsupported-version` or `unsupported-operation`.
 
-### Termination and Expiry
+### Termination and Expiry {#termination}
 
 TERMINATE is final.
 
@@ -964,10 +964,11 @@ MCP: "fs-server" publishes the result of that call
       -- "response"
 ~~~
 
-The MCP tracks are the MCP over MOQT tracks
-`(mcp, {session-id}, tools, {tool-name}) -- request` and
-`-- response` {{MCP-MOQT}}, re-rooted under the dialog namespace and
-each publisher's agent-id ({{mcp-binding}}).
+The MCP tracks above are the `request` and `response` tracks of
+`(mcp, {session-id}, tools, {tool-name})` in MCP over MOQT
+{{MCP-MOQT}}, with the leading `(mcp, {session-id})` fields replaced
+by the dialog namespace and the publisher's agent-id
+({{mcp-binding}}).
 
 See {{example-workflows}} for concrete examples of agent-to-agent,
 agent-to-tool, and multi-agent collaboration workflows.
@@ -1076,63 +1077,72 @@ or falls behind.
 
 ### Opening a Dialog {#opening}
 
-Prerequisite: B follows A ({{agent-discovery}}), or B learns the
-dialog-id out of band.
+Prerequisite: B learns the dialog-id from A's invitation, which
+requires that B follows A ({{agent-discovery}}), or out of band. A
+does not need B's prefix: all participants' tracks are under the
+dialog prefix.
 
-Agent A (controller) opens a dialog with Agent B (invitee) as follows:
+Below, PUBLISH, SUBSCRIBE, and SUBSCRIBE_TRACKS are MOQT messages;
+OPEN, ACCEPT, and UPDATE are PACE control messages sent as objects on
+the sender's `ctrl` track. Agent A (controller) opens a dialog with
+Agent B (invitee):
 
 1. A generates a dialog-id (UUID version 4) and issues
-   SUBSCRIBE_TRACKS on the dialog prefix `("pace","dialogs",{dialog-id})`.
+   SUBSCRIBE_TRACKS on `("pace","dialogs",{dialog-id})`, which covers
+   all participants' tracks, including future ones.
 
-2. A publishes OPEN on
-   `("pace","dialogs",{dialog-id},"agent-a") -- "ctrl"`. The context
-   lists A as `active` and B as `invited`; `parameters` carries the
-   proposed dialog parameters ({{dialog-parameters}}) and
-   `credentials` carries A's identity assertion.
+2. A issues PUBLISH for
+   `("pace","dialogs",{dialog-id},"agent-a") -- "ctrl"` and sends OPEN
+   on it, listing B as `invited`, with `parameters`
+   ({{dialog-parameters}}) and `credentials`.
 
-3. A publishes an invitation for B on
+3. A sends an invitation on
    `("pace","agents","agent-a","invites") -- "agent-b"`
-   ({{invitations}}). The relay forwards it to B, which subscribed
-   to that track when it started following A.
+   ({{invitations}}), which B subscribed to when it started following
+   A.
 
-4. B issues SUBSCRIBE on A's `ctrl` track,
-   `("pace","dialogs",{dialog-id},"agent-a") -- "ctrl"`. This is a
-   MOQT subscription only. B reads OPEN and decides whether to join.
+4. B issues SUBSCRIBE with FILL_PARAMETERS on A's `ctrl` track, reads
+   OPEN, and decides. Until it accepts, B subscribes to nothing else,
+   so it receives no dialog content.
 
-5. B publishes ACCEPT (or REJECT) on
-   `("pace","dialogs",{dialog-id},"agent-b") -- "ctrl"`, with the
-   accepted parameters and its own credentials. On accepting, B issues
-   SUBSCRIBE_TRACKS on `("pace","dialogs",{dialog-id})`.
+5. B issues PUBLISH for
+   `("pace","dialogs",{dialog-id},"agent-b") -- "ctrl"` and sends
+   ACCEPT (or REJECT) on it, with its parameters and credentials. On
+   accepting, B issues SUBSCRIBE_TRACKS on the dialog prefix, which
+   also covers A's `ctrl` track.
 
-6. The relay forwards the new track to A through A's subscription to
-   the dialog prefix.
+6. The relay forwards B's PUBLISH to A through A's SUBSCRIBE_TRACKS
+   from step 1, and A reads ACCEPT.
 
-7. A reads ACCEPT and publishes UPDATE at generation 1, with B marked
-   `active` and the dialog state `active`.
+7. A sends UPDATE (generation 1) on its `ctrl` track, marking B and
+   the dialog `active`. If B rejected, the UPDATE marks B `rejected`,
+   and B ends its `ctrl` track with PUBLISH_DONE.
 
-8. The dialog is active. Both agents can publish further tracks under
-   their agent-id in the dialog namespace; the relay forwards each new
-   PUBLISH to every participant through its subscription to the
-   dialog prefix.
-
-Multi-party dialogs follow the same pattern: the controller invites
-participants in OPEN or a later UPDATE, sends each an invitation, and
-each invitee responds on its own `ctrl` track. Participants already in
-the dialog receive a new participant's tracks without subscribing
-again.
+Tracks either agent publishes later reach every participant through
+its SUBSCRIBE_TRACKS on the dialog prefix. Multi-party dialogs follow
+the same pattern, and existing participants receive a new
+participant's tracks without subscribing again.
 
 ### Joining a Dialog {#joining}
 
 An agent that knows a dialog's dialog-id but was not invited asks to
-join by publishing JOIN_REQUEST on its own `ctrl` track,
-`("pace","dialogs",{dialog-id},{joiner-id}) -- "ctrl"`. The controller
-receives it through its subscription to the dialog prefix, validates
-the credentials, and decides whether to admit the joiner. The joiner
-subscribes to the controller's `ctrl` track to read the answer. To
+join by issuing PUBLISH for its own `ctrl` track,
+`("pace","dialogs",{dialog-id},{joiner-id}) -- "ctrl"`, and sending
+JOIN_REQUEST as the first object on it. The relay forwards the
+PUBLISH to every participant holding SUBSCRIBE_TRACKS on the dialog
+prefix, not only the controller. Only the controller acts on
+JOIN_REQUEST; other participants MUST ignore it, and MAY decline a
+PUBLISH for a track whose agent-id is not in the dialog context. A
+joiner therefore discloses in its credentials only claims it is
+willing for every participant to see. The controller validates the
+credentials and decides whether to admit the joiner. The joiner
+subscribes to the controller's `ctrl` track with FILL_PARAMETERS, so
+it receives the current dialog state as well as the answer. To
 admit it, the controller invites the joiner with UPDATE, the joiner
 answers with ACCEPT and subscribes to the dialog prefix, and the
 controller's next UPDATE marks it `active`. A controller that declines
-answers with ERROR `policy-rejected`. Before admission, the joiner's
+answers with ERROR `policy-rejected`, and the joiner then ends its
+`ctrl` track with PUBLISH_DONE. Before admission, the joiner's
 authorization covers only publishing its own `ctrl` track and reading
 the controller's ({{relay-authorization}}).
 
@@ -1160,9 +1170,11 @@ publishing UPDATE on its `ctrl` track with the complete context at the
 next generation. Participants request changes with JOIN_REQUEST or
 LEAVE; only the controller commits them. Parameter changes, such as
 adding a modality, are proposed in `parameters` on UPDATE, and each
-participant answers with ACCEPT or REJECT ({{lifecycle}}).
+participant answers with ACCEPT or REJECT ({{lifecycle}}). An UPDATE
+that adds a participant is followed by an invitation to it
+({{invitations}}).
 
-Participants MAY use MOQT's REQUEST_UPDATE message {{MoQ-TRANSPORT}}
+Participants MAY use MOQT's REQUEST_UPDATE message
 to change per-subscription parameters, such as pausing delivery with
 FORWARD=0, resuming with FORWARD=1, or changing priorities and
 filters, without tearing down the subscription. REQUEST_UPDATE is the
@@ -1187,7 +1199,8 @@ PACE recovers from network and intermediary failures in several ways:
   through the QUIC idle timeout or a subscription timeout, an agent
   reconnects
   (to the same relay or an alternate one), re-issues PUBLISH_NAMESPACE
-  on its agent namespace and SUBSCRIBE_TRACKS on the dialog prefix,
+  on its agent namespace, its follow subscriptions
+  ({{agent-discovery}}), and SUBSCRIBE_TRACKS on the dialog prefix,
   which includes the controller's `ctrl` track, and sends STATE_REQUEST with its last
   accepted generation. It applies the controller's STATE only after
   authenticating the controller and checking that the generation is not
@@ -1217,9 +1230,13 @@ PACE recovers from network and intermediary failures in several ways:
 
 ### Cancellation {#cancel-over-moqt}
 
-A participant publishes CANCEL on its `ctrl` track at critical
-priority (0-15). For scope `operation`, `target` names a track the
-sender publishes in the dialog and, optionally, a group on it:
+A participant sends CANCEL ({{cancellation}}) as an object on its
+`ctrl` track at critical priority (0-15). Scopes `dialog` and
+`subtree` need no `target`. For scope `subtree`, a receiver that
+controls a delegated dialog whose `parent_dialog_ids` include this
+dialog sends CANCEL with scope `dialog` on its own `ctrl` track in
+that delegated dialog. For scope `operation`, `target` names a track
+the sender publishes in the dialog and, optionally, a group on it:
 
 ~~~json
 {
@@ -1241,21 +1258,30 @@ closing a MOQT session does not cancel work.
 
 ### Termination and Revocation
 
-The controller ends the dialog by publishing TERMINATE on its `ctrl`
-track. A participant leaves with LEAVE. Upon termination, pending
-operations are cancelled, and dialog resources are released after a
-configurable grace period.
+The controller ends the dialog by sending TERMINATE on its `ctrl`
+track ({{termination}}). Upon termination, pending operations are
+cancelled, and dialog resources are released after a configurable
+grace period.
 
-After TERMINATE, each participant SHOULD send PUBLISH_DONE
-{{MoQ-TRANSPORT}} on every dialog track it was publishing (ctrl, chat,
-audio, video, and any operation tracks). PUBLISH_DONE signals that no
+After TERMINATE, or when `expires_at` passes, each participant SHOULD
+send PUBLISH_DONE on every dialog track it was publishing (ctrl,
+chat, audio, video, and any operation tracks), and ends its
+subscription to the dialog prefix. PUBLISH_DONE signals that no
 further objects will be delivered on the track, allowing subscribers
 and relays to release state without waiting for timeouts. Neither
 PUBLISH_DONE nor STOP_SENDING substitutes for TERMINATE.
 
-When the controller publishes REVOKE, every participant stops
-forwarding dialog context to the revoked participant and cancels any
-subscriptions held only on its behalf ({{lifecycle}}). The deployment
+A participant leaves by sending LEAVE on its `ctrl` track. The
+controller commits it with UPDATE, marking the participant `left`,
+and SHOULD send TERMINATE if only the controller remains active
+({{lifecycle}}). The leaver then ends its tracks with PUBLISH_DONE and
+its subscription to the dialog prefix.
+
+When the controller sends REVOKE, every participant stops forwarding
+dialog context to the revoked participant and cancels any
+subscriptions held only on its behalf ({{lifecycle}}). The revoked
+participant ends its tracks with PUBLISH_DONE, and participants MAY
+decline its later PUBLISHes. The deployment
 also withdraws the revoked participant's authorization at the relay,
 for example by letting its {{MoQ-C4M}} token expire or by refusing
 revalidation, so that the relay stops delivering the participant's
@@ -1465,48 +1491,35 @@ token's `act` claim then carries the `sub` and `iss` of the SD-Card
 
 ### Selective Disclosure {#selective-disclosure}
 
-Agents cross trust boundaries where different peers need different
-subsets of claims. A tool-side peer may need only the agent identifier
-and its authorization; it does not need the full delegation chain or
-the principal.
-Agents SHOULD support selective disclosure so they reveal only what
-each peer requires.
+Different peers need different claims: a tool may need only the
+agent identifier and its authorization, not the delegation chain or
+the principal. Agents SHOULD disclose only what each peer requires,
+using the selective disclosure of the mechanism in use
+({{identity-formats}}). For agent metadata, SD-Card {{SD-CARD}} lets
+an agent disclose issuer-attested claims per peer, and an Agent Card
+({{agent-card}}) can be an SD-Card.
 
-For agent metadata, SD-Card {{SD-CARD}} provides this: an Agent
-Registry attests the agent's metadata once, and the agent discloses to
-each peer only the claims that peer is authorized to see, while the
-peer can check that each disclosed claim is issuer-attested and
-unmodified. An Agent Card ({{agent-card}}) can be an SD-Card. Identity
-assertions and authorization proofs in `credentials` use the selective
-disclosure features of the mechanism in use ({{identity-formats}}).
-
-Selective disclosure keeps metadata confidential; it does not make
-agents anonymous. The `sub` claim of an SD-Card is always disclosed
-and is stable across issuances, so presentations of the same SD-Card
-can be linked ({{Section 3.1 of SD-CARD}}). Linkage through agent and
-dialog identifiers is mitigated by the measures in {{privacy}}, not
-by selective disclosure.
+Selective disclosure does not make agents anonymous: an SD-Card's
+`sub` is always disclosed and stable, so its presentations can be
+linked ({{Section 3.1 of SD-CARD}}). Identifier linkage is addressed
+in {{privacy}}.
 
 ### Key-Bound Presentation {#key-binding}
 
-A presentation proves that the presenter holds the credential only
-when it is bound to the verifier and to a fresh value the verifier
-supplied, such as the Key Binding JWT of an SD-Card
-({{Section 6 of SD-CARD}}). In PACE, a participant that will verify a
-peer's credentials includes a `nonce` member in its control message
-({{control-encoding}}). The peer's next control message to that
-participant carries in `credentials` a presentation whose nonce equals
-that value and whose audience is the verifier's agent-id.
+A presentation proves possession only when it is bound to the
+verifier and to a fresh value from it, such as an SD-Card Key Binding
+JWT ({{Section 6 of SD-CARD}}). A verifier sends a `nonce` in its
+control message ({{control-encoding}}), and the peer's next control
+message carries, in its `credentials` member, a presentation bound to
+that nonce, with the verifier's agent-id as audience.
 
-When a dialog opens ({{opening}}), the controller sends a nonce in
-OPEN, and the invitee's ACCEPT carries a presentation bound to it,
-together with the invitee's own nonce. The controller then presents
-its credentials, bound to the invitee's nonce, in the UPDATE that
-marks the invitee `active`. A joiner and the controller do the same
-with JOIN_REQUEST, UPDATE, and ACCEPT ({{joining}}). A
-participant that requires a key-bound presentation and does not
-receive one, or receives one that fails verification, MUST NOT treat
-the peer as authenticated.
+When a dialog opens ({{opening}}), OPEN carries the controller's
+nonce, ACCEPT carries the invitee's bound presentation and its own
+nonce, and the controller's UPDATE carries its presentation bound to
+that nonce. Joining uses JOIN_REQUEST, UPDATE, and ACCEPT the same
+way ({{joining}}). A participant that requires a key-bound
+presentation and does not receive a valid one MUST NOT treat the peer
+as authenticated.
 
 ## Agent Discovery {#agent-discovery}
 
@@ -2008,41 +2021,22 @@ content unless the deployment explicitly trusts them to.
 
 ### Relay Authorization {#relay-authorization}
 
-Every PACE subscription is either to one track or to one dialog's
-prefix, so the relay authorizes it against the subscriber's token when
-the subscription is made, and everything it then forwards is covered.
-The `moqt` claim of a Common Access Token matches each Track Namespace
-field exactly or by prefix {{MoQ-C4M}}, so the scopes PACE needs are
-expressed without a new claim. For agent B:
+Relays do not interpret PACE. They enforce, per namespace and track,
+who may publish and who may subscribe, using the agent's token, for
+example a Common Access Token {{MoQ-C4M}}. The access each agent
+needs follows from following ({{agent-discovery}}), invitations
+({{invitations}}), opening ({{opening}}), and joining ({{joining}}),
+and each agent publishes only under its own agent-id
+({{track-organization}}). The controller, or its authorization server,
+grants an agent access to a dialog on invitation or admission and
+withdraws it when the agent leaves or is revoked.
 
-~~~
-Follow agent A:
-  [[SUBSCRIBE], ["pace","agents","agent-a",nil], "card"]
-  [[SUBSCRIBE], ["pace","agents","agent-a","invites",nil], "agent-b"]
-Participate in dialog D (invited or admitted):
-  [[SUBSCRIBE, FETCH], ["pace","dialogs",D]]
-  [[PUBLISH], ["pace","dialogs",D,"agent-b"]]
-Ask to join dialog D controlled by A (until admitted):
-  [[SUBSCRIBE], ["pace","dialogs",D,"agent-a",nil], "ctrl"]
-  [[PUBLISH], ["pace","dialogs",D,"agent-b",nil], "ctrl"]
-~~~
-
-The PUBLISH scopes ensure that an agent publishes only under its own
-agent-id. A controller, or the authorization server it relies on,
-issues the participant scope when it invites or admits an agent, and
-stops revalidating it ({{Section 2.2 of MoQ-C4M}}) when the
-participant leaves or is revoked. How the token reaches the agent is
-deployment-specific; the Poppy binding returns it over HTTPS
-({{poppy-binding}}).
-
-A subscription to `("pace","dialogs")`, or to any prefix of it shorter
-than a dialog-id, would reveal every dialog on the relay. Relays MUST
-refuse SUBSCRIBE_NAMESPACE and SUBSCRIBE_TRACKS on such a prefix unless
-the subscriber's token explicitly covers it.
-
-Editor's note: {{MoQ-C4M}} defines no action for SUBSCRIBE_TRACKS,
-which a participant uses on the dialog prefix. This is to be raised
-with its authors.
+Because each PACE subscription covers one track or one dialog prefix,
+the relay checks it once, when it is made. Relays MUST refuse
+subscriptions to a prefix of `("pace","dialogs")` shorter than a
+dialog-id unless explicitly authorized, since they would reveal every
+dialog on the relay. How tokens reach agents is deployment-specific;
+the Poppy binding returns them over HTTPS ({{poppy-binding}}).
 
 ## Privacy Considerations {#privacy}
 
