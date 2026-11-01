@@ -1722,8 +1722,11 @@ MCP messages keep their native JSON-RPC format as the object payload
 | `resources/read` | FETCH or SUBSCRIBE on the server's `("mcp","resources") -- {resource-uri}` track |
 | `notifications/cancelled` | Applied from PACE CANCEL ({{cancellation}}) |
 
-MCP tracks use the Standard Operations priority tier
-({{data-exchange}}).
+MCP tracks use the PACE priority tiers ({{data-exchange}}) as
+{{MCP-MOQT}} assigns them: control and elicitation tracks use Urgent
+Signals, tool, sampling and task tracks Standard Operations, catalog
+and skill tracks Discovery, notification and log tracks Background,
+and resource and prompt tracks Bulk Transfer.
 
 An MCP server that holds an MCP SD-Card returns a key-bound
 presentation to the client that requests one
@@ -2172,7 +2175,8 @@ fs-tool publishes:
    `{"jsonrpc":"2.0","method":"tools/call","params":{"name":"readFile",
    "arguments":{"path":"/data/report.csv"}},"id":"t1"}`.
 3. fs-tool publishes the result in Group 7 of its `readFile` response
-   track. The matching Group ID pairs the response with the request.
+   track. The JSON-RPC `id` pairs the response with the request; the
+   matching Group ID helps relays and recovery ({{MCP-MOQT}}).
 4. A makes further calls as new groups, or terminates the dialog.
 
 ## Streaming a Long-Running Tool Call
@@ -2186,11 +2190,10 @@ dialog `D3`.
 2. code-tool publishes its output as objects in Group 5 of its
    response track (see the table below). A receives each object as
    soon as it is published.
-3. To cancel, A publishes `notifications/cancelled` on its MCP control
-   track,
-   `("pace","dialogs",D3,"agent-a","mcp","control") -- "client-to-server"`
-   {{MCP-MOQT}}. code-tool stops and publishes no further objects in
-   Group 5.
+3. To cancel, A publishes `notifications/cancelled` as the next object
+   in Group 5 of its `generateCode` request track {{MCP-MOQT}}.
+   code-tool stops and ends Group 5 of its response track with an
+   error.
 
 | Object | Content |
 |---|---|
