@@ -2206,13 +2206,16 @@ code-tool publishes:
    stops and ends Group 5 of its response track with a JSON-RPC
    error.
 
+The table lists the objects in code-tool's reply, in Object ID order,
+and the subgroup that carries each.
+
 | Object | Subgroup | Content |
 |---|---|---|
 | 0 | 0 | `notifications/progress`: progress 0 of 3, "Planning modules" |
 | 1 | 0 | `notifications/progress`: progress 1 of 3, "Generated parser" |
 | 2 | 0 | `notifications/progress`: progress 2 of 3, "Generated tests" |
 | 3 | 1 | `tools/call` result with the generated code (142 lines) |
-{: title="Group 5 of code-tool's generateCode Response Track"}
+{: title="Objects in code-tool's Reply to the Group 5 Call"}
 
 ## Interrupting a Voice Agent
 
