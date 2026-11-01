@@ -119,17 +119,7 @@ informative:
     seriesinfo:
       Internet-Draft: draft-ietf-moq-c4m-01
     target: https://datatracker.ietf.org/doc/draft-ietf-moq-c4m/
-  MCP-MOQT:
-    title: "Model Context Protocol and Agent Skills over Media over QUIC Transport"
-    date: 2026
-    author:
-    - ins: C. Jennings
-    - ins: I. Swett
-    - ins: J. Rosenberg
-    - ins: S. Nandakumar
-    seriesinfo:
-      Internet-Draft: draft-jennings-agentproto-mcp-over-moqt
-    target: https://datatracker.ietf.org/doc/draft-jennings-agentproto-mcp-over-moqt/
+  MCP-MOQT: I-D.jennings-agentproto-mcp-over-moqt
   STIVERS:
     title: "Universals and cultural variation in turn-taking in conversation"
     date: 2009-06
@@ -965,10 +955,10 @@ MCP: "fs-server" publishes the result of that call
 ~~~
 
 The MCP tracks above are the `request` and `response` tracks of
-`(mcp, {session-id}, tools, {tool-name})` in MCP over MOQT
-{{MCP-MOQT}}, with the leading `(mcp, {session-id})` fields replaced
-by the dialog namespace and the publisher's agent-id
-({{mcp-binding}}).
+`(mcp, {server-id}, clients, {client-id}, tools, {tool-name})` in MCP
+over MOQT {{MCP-MOQT}}, with the leading
+`(mcp, {server-id}, clients, {client-id})` fields replaced by the
+dialog namespace and the publisher's agent-id ({{mcp-binding}}).
 
 See {{example-workflows}} for concrete examples of agent-to-agent,
 agent-to-tool, and multi-agent collaboration workflows.
@@ -1628,7 +1618,7 @@ the full context sends STATE_REQUEST.
 
 | Protocol | Carried in | Keep distinct from |
 |---|---|---|
-| MCP | `_meta` | JSON-RPC request IDs and the {{MCP-MOQT}} session-id |
+| MCP | `_meta` | JSON-RPC request IDs and the {{MCP-MOQT}} client ID |
 | Poppy | Track namespace ({{poppy-binding}}) | Conversation ID |
 | AutoGen | Message `metadata` | Conversation ID |
 | A2A | Message `metadata` | `contextId`, `taskId` |
@@ -1687,29 +1677,33 @@ Tracks:    {track-name}
 The complete MCP over MOQT specification, covering track structure,
 operation mapping, message serialization, Agent Skills, and relay
 support, is defined in {{MCP-MOQT}}. PACE adopts its track semantics.
-The mapping is mechanical: the leading `(mcp, {session-id})` fields of
-an MCP over MOQT namespace are replaced by `("pace", "dialogs",
-{dialog-id}, {agent-id}, "mcp")`, and the remaining namespace fields
-and the track name are kept unchanged. For example:
+The mapping is mechanical: the leading
+`(mcp, {server-id}, clients, {client-id})` or `(mcp, {server-id})`
+fields of an MCP over MOQT namespace are replaced by `("pace",
+"dialogs", {dialog-id}, {agent-id}, "mcp")`, and the remaining
+namespace fields and the track name are kept unchanged. For example,
+with `{cli}` and `{srv}` the agent-ids of the MCP client and server:
 
 ~~~
 MCP over MOQT:
-  (mcp, {session-id}, tools, {tool-name}) -- request
-  (mcp, {session-id}, tools, {tool-name}) -- response
-  (mcp, {session-id}, resources) -- {resource-uri}
+  (mcp, {server-id}, clients, {client-id}, tools, {tool-name})
+      -- request
+  (mcp, {server-id}, clients, {client-id}, tools, {tool-name})
+      -- response
+  (mcp, {server-id}, resources) -- {resource-uri}
 Within PACE:
-  ("pace","dialogs",{dialog-id},{client-id},"mcp","tools",
+  ("pace","dialogs",{dialog-id},{cli},"mcp","tools",
    {tool-name}) -- "request"
-  ("pace","dialogs",{dialog-id},{server-id},"mcp","tools",
+  ("pace","dialogs",{dialog-id},{srv},"mcp","tools",
    {tool-name}) -- "response"
-  ("pace","dialogs",{dialog-id},{server-id},"mcp","resources")
+  ("pace","dialogs",{dialog-id},{srv},"mcp","resources")
       -- {resource-uri}
 ~~~
 
-
-The standalone MCP session discovery flow of {{MCP-MOQT}} is not used
-within PACE: PACE supplies the dialog-id, and peers learn each
-other's MCP tracks through SUBSCRIBE_TRACKS on the dialog prefix.
+MCP needs no handshake of its own, and MCP over MOQT client IDs are
+not used within PACE: PACE supplies the dialog-id, and peers learn
+each other's MCP tracks through SUBSCRIBE_TRACKS on the dialog
+prefix.
 
 MCP messages keep their native JSON-RPC format as the object payload
 ({{message-serialization}}) and carry the dialog reference in `_meta`
@@ -1722,8 +1716,10 @@ MCP messages keep their native JSON-RPC format as the object payload
 | `resources/read` | FETCH or SUBSCRIBE on the server's `("mcp","resources") -- {resource-uri}` track |
 | `notifications/cancelled` | Applied from PACE CANCEL ({{cancellation}}) |
 
-MCP tracks use the Standard Operations priority tier
-({{data-exchange}}).
+MCP tracks use the PACE priority tiers ({{data-exchange}}) as
+{{MCP-MOQT}} assigns them: control, tool, prompt, task and skill
+execution tracks use Standard Operations, catalog and skill content tracks
+Discovery, and resource tracks Bulk Transfer.
 
 An MCP server that holds an MCP SD-Card returns a key-bound
 presentation to the client that requests one
@@ -2172,7 +2168,8 @@ fs-tool publishes:
    `{"jsonrpc":"2.0","method":"tools/call","params":{"name":"readFile",
    "arguments":{"path":"/data/report.csv"}},"id":"t1"}`.
 3. fs-tool publishes the result in Group 7 of its `readFile` response
-   track. The matching Group ID pairs the response with the request.
+   track. The JSON-RPC `id` pairs the response with the request; the
+   matching Group ID helps relays and recovery ({{MCP-MOQT}}).
 4. A makes further calls as new groups, or terminates the dialog.
 
 ## Streaming a Long-Running Tool Call
@@ -2186,11 +2183,10 @@ dialog `D3`.
 2. code-tool publishes its output as objects in Group 5 of its
    response track (see the table below). A receives each object as
    soon as it is published.
-3. To cancel, A publishes `notifications/cancelled` on its MCP control
-   track,
-   `("pace","dialogs",D3,"agent-a","mcp","control") -- "client-to-server"`
-   {{MCP-MOQT}}. code-tool stops and publishes no further objects in
-   Group 5.
+3. To cancel, A publishes `notifications/cancelled` as the next object
+   in Group 5 of its `generateCode` request track {{MCP-MOQT}}.
+   code-tool stops and ends Group 5 of its response track with an
+   error.
 
 | Object | Content |
 |---|---|
