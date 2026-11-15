@@ -714,7 +714,7 @@ An example entry:
  "kind": "agent", "acts_for": "u-4f9a",
  "detected_kind": [{"kind": "agent", "by": "brand-agent"}],
  "assurance": [{"level": "delegated", "by": "brand-agent",
-                "method": "jwt", "at": "2026-11-13T10:02:11Z"}],
+                "method": "credential", "at": "2026-11-13T10:02:11Z"}],
  "posture": "adversarial",
  "declaration_ref": "9b2f6c1e-0d4a-4e8b-a7c3-5f1d2e3a4b6c"}
 ~~~
@@ -3163,6 +3163,13 @@ PACE Assurance Methods ({{participant-descriptors}}), with initial
 values `credential`, `cimd`, `resumed`, and `join-code`, each
 referencing this document. Values for telephony, such as STIR/SHAKEN
 attestation levels, are registered by {{PACE-TEL}}.
+
+This document also asks IANA to register the following entry in the
+"Setup Options" registry of {{MoQ-TRANSPORT}}:
+
+| Type | Name | Specification |
+|-----:|:-----|:--------------|
+| 0x50414301 | pace-version | {{moqt-setup-extensions}} |
 
 TODO: registries for control operations, ERROR reasons, and dialog
 parameters.
