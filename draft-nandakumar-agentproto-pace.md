@@ -2572,8 +2572,9 @@ that nonce, with the verifier's agent-id as audience.
 A presentation also binds the control message that carries it, so
 that a copy of it in another message does not verify. It does so with
 the `mth` claim of {{WPT-MSG}}, computed under the `pace`
-canonicalization profile below. Each presentation carries `nonce`
-(the verifier's nonce), `aud` (the verifier's agent-id), and `mth`.
+canonicalization profile below. Each presentation carries `aud` (the
+verifier's agent-id), `mth`, and `nonce` (the verifier's nonce),
+except that a first message has no nonce to carry ({{first-message}}).
 PACE supports three presentation types, one for each kind of
 credential, and a verifier tells them apart by the JOSE `typ` header:
 
@@ -2637,8 +2638,10 @@ and MUST NOT be `none` or a MAC algorithm. Its JOSE header carries:
 
 Its claims are:
 
-* `aud`: REQUIRED. The verifier's agent-id.
-* `nonce`: REQUIRED. The verifier's `nonce`.
+* `aud`: REQUIRED. The verifier's agent-id, or an array of the
+  agent-ids of several verifiers {{RFC7519}}.
+* `nonce`: The verifier's `nonce`. REQUIRED, except in a presentation
+  sent before the sender has one ({{first-message}}).
 * `iat` and `jti`: REQUIRED.
 * `ath`: REQUIRED. The base64url-encoded SHA-256 hash {{RFC6234}} of
   the ASCII encoding of the credential it accompanies.
@@ -2649,7 +2652,8 @@ The verifier checks the signature with the key that the credential
 confirms, after checking a `jwk` or `x5c` against the credential's
 thumbprint or certificate; and checks `typ`, `aud`, `nonce`, `ath`,
 and `mth`. It rejects a presentation whose `jti` it has already
-accepted in the dialog.
+accepted in the dialog, and one whose `aud` does not contain its own
+agent-id.
 
 When a dialog opens ({{opening}}), OPEN carries the controller's
 nonce, ACCEPT carries the invitee's bound presentation and its own
@@ -2658,6 +2662,25 @@ that nonce. Joining uses JOIN_REQUEST, UPDATE, and ACCEPT the same
 way ({{joining}}). A participant that requires a key-bound
 presentation and does not receive a valid one MUST NOT treat the peer
 as authenticated.
+
+#### The First Message {#first-message}
+
+OPEN and JOIN_REQUEST are sent before the sender has a nonce from its
+peer, so the presentation they carry cannot be bound to one. Without
+a presentation, an intermediary could change their content, such as
+the dialog-id, `purpose`, or `basis`, and the change would show only
+when the peer's later message failed to match.
+
+The sender of OPEN or JOIN_REQUEST therefore includes a presentation
+with `mth` over the message and without `nonce`. Its `aud` is the
+invitee's agent-id, or, for an OPEN with several invitees, an array of
+their agent-ids; a presentation type whose `aud` takes one value is
+included once per invitee. Such a presentation proves who sent the
+message and that it is unchanged, but not that it is fresh: the
+receiver relies on `iat` and `jti` until the sender's next
+presentation, bound to the receiver's nonce, proves freshness. A
+receiver MUST NOT treat the sender as authenticated until that bound
+presentation verifies.
 
 Resumption uses STATE_REQUEST and STATE the same way. A participant
 resuming a dialog sends STATE_REQUEST with a `nonce` and a
