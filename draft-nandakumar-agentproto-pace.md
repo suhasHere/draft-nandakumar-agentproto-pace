@@ -2655,12 +2655,24 @@ Its claims are:
 * `mth`: REQUIRED. The message hash of {{WPT-MSG}}, under the `pace`
   profile.
 
-The verifier checks the signature with the key that the credential
-confirms, after checking a `jwk` or `x5c` against the credential's
-thumbprint or certificate; and checks `typ`, `aud`, `nonce`, `ath`,
-and `mth`. It rejects a presentation whose `jti` it has already
-accepted in the dialog, and one whose `aud` does not contain its own
-agent-id.
+A verifier checks a presentation at one of two levels:
+
+Origin and integrity:
+: The signature, with the key that the credential confirms, after
+  checking a `jwk` or `x5c` against the credential's thumbprint or
+  certificate; `typ`; `ath`; and `mth`. These show who sent the message
+  and that it is unchanged. Any participant that reads the message can
+  check them, and they are enough to detect a forged or modified
+  message ({{control-security}}).
+
+Authentication of the sender:
+: In addition, that `aud` contains the verifier's own agent-id and that
+  `nonce` is the nonce the verifier sent. Only the verifier the
+  presentation is addressed to can check these.
+
+A verifier rejects a presentation that fails a check it applies, and
+one whose `jti` it has already accepted in the dialog on a different
+message.
 
 When a dialog opens ({{opening}}), OPEN carries the controller's
 nonce, ACCEPT carries the invitee's bound presentation and its own
@@ -2669,6 +2681,21 @@ that nonce. Joining uses JOIN_REQUEST, UPDATE, and ACCEPT the same
 way ({{joining}}). A participant that requires a key-bound
 presentation and does not receive a valid one MUST NOT treat the peer
 as authenticated.
+
+Resumption uses STATE_REQUEST and STATE the same way. A participant
+resuming a dialog sends STATE_REQUEST with a `nonce` and a
+presentation in `credentials`; if it holds a nonce from the
+controller's last message, the presentation is bound to it. The
+controller's STATE carries a presentation bound to the STATE_REQUEST
+nonce. The controller thereby verifies that the resuming party is the
+participant whose exchange was interrupted, and the participant
+verifies the controller. The controller answers with ERROR instead of
+STATE when the dialog is terminated (`dialog-terminated`), the
+participant is revoked (`participant-revoked`), or the check fails
+(`unauthenticated`, `unauthorized`) or cannot be completed
+(`authorization-unavailable`). A controller that resumes sends its own
+nonce in its next control message and requires each participant's
+next control message to carry a presentation bound to it.
 
 #### The First Message {#first-message}
 
@@ -2689,20 +2716,62 @@ presentation, bound to the receiver's nonce, proves freshness. A
 receiver MUST NOT treat the sender as authenticated until that bound
 presentation verifies.
 
-Resumption uses STATE_REQUEST and STATE the same way. A participant
-resuming a dialog sends STATE_REQUEST with a `nonce` and a
-presentation in `credentials`; if it holds a nonce from the
-controller's last message, the presentation is bound to it. The
-controller's STATE carries a presentation bound to the STATE_REQUEST
-nonce. The controller thereby verifies that the resuming party is the
-participant whose exchange was interrupted, and the participant
-verifies the controller. The controller answers with ERROR instead of
-STATE when the dialog is terminated (`dialog-terminated`), the
-participant is revoked (`participant-revoked`), or the check fails
-(`unauthenticated`, `unauthorized`) or cannot be completed
-(`authorization-unavailable`). A controller that resumes sends its own
-nonce in its next control message and requires each participant's
-next control message to carry a presentation bound to it.
+#### Control Message Security {#control-security}
+
+Relays and dialog hosts forward every control message, and relays
+terminate TLS. Without protection in the message itself, they could
+forge a message, for example a TERMINATE in the controller's name or a
+CANCEL that stops a participant's work, or replay one. This section
+says how participants detect both.
+
+Presentation on every message:
+: Every control message carries a key-bound presentation in
+  `credentials`. A sender MAY omit it only where every party that
+  forwards the message to its receivers is trusted, for example inside
+  one trust domain with no relay. A receiver that does not trust the
+  path rejects a control message without a valid presentation, with
+  ERROR `unauthenticated` ({{error-reasons}}). A message without a
+  presentation has none of the protections below.
+
+Several receivers:
+: A message that several participants receive, such as the
+  controller's UPDATE, carries a presentation whose `aud` is the array
+  of those participants. Its `nonce`, if any, binds it to the one
+  participant whose nonce it answers; the others check its origin and
+  integrity.
+
+Sender binding:
+: A receiver MUST check that the credential of the presentation
+  identifies the participant named in `sender_id`. For UPDATE, REVOKE,
+  TERMINATE, SEGMENT, and STATE, that participant MUST be the
+  controller named in `controller_id`, or an alternate taking over as
+  {{controller-transfer}} allows.
+
+Role check:
+: A receiver MUST reject, with ERROR `unauthorized`, an operation that
+  the verified sender may not send, according to the Sender column of
+  {{table-control-ops}}.
+
+Replay:
+: A message copied from another dialog fails `mth`, which covers its
+  `dialog_id`. An older controller message fails the generation rules
+  ({{generations}}). The same message delivered again, such as a
+  TERMINATE redelivered after a reconnection, has the same
+  `message_id`; the receiver processes it once and does not repeat its
+  side effects. A receiver keeps the `message_id` and presentation
+  `jti` values it has accepted for at least the dialog's
+  `log_retention` ({{dialog-parameters}}). After that, it rejects a
+  presentation whose `iat` is older than the period for which it keeps
+  them, unless the dialog log delivers the message at a position the
+  receiver has not yet accepted ({{log-replay}}).
+
+> **Editor's note:** A host or relay cannot forge controller messages,
+> but a dishonest controller could sign two different messages at the
+> same generation and send each to different participants. Controller
+> messages could carry `prev`, a hash of the previous generation's
+> context, so that participants comparing their chains, through the
+> controller or out of band, detect such a fork. Feedback is welcome
+> on whether this is needed.
 
 ### Records and Provenance {#records}
 
