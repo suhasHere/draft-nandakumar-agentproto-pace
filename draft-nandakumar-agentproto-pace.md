@@ -874,60 +874,83 @@ request that the controller commits with UPDATE ({{committing}}).
 
 ### Participant Descriptors {#participant-descriptors}
 
-Participants in one dialog can be people, agents, tools, and gateways,
-acting for different principals and authenticated to different degrees
-{{DIALOG-UC}}. Each entry in `participants` MAY carry these optional
-members:
+In a dialog between a person and their own agent, the participants
+know who each other is. Many dialogs PACE carries are not like that
+{{DIALOG-UC}}. A consumer's agent negotiates with a brand's agent; a
+person on a phone call talks to a voice agent through a gateway; a
+recorder or a transcriber joins a meeting. Before a participant shares
+information or agrees to something, it needs answers to questions
+such as:
+
+* Is the other party a person or software?
+* For whom does it act, and what may it commit to?
+* How strongly was it authenticated, and by whom?
+* Has it agreed to be recorded, or to have its input processed?
+* Is it here to cooperate, or to bargain?
+
+Policies, and in some places laws, on AI disclosure, recording
+consent, and delegated authority depend on these answers.
+Participant descriptors carry them in the dialog context, so that
+every participant sees the same answers and knows who gave each one.
+
+Each entry in `participants` MAY carry the members below. They come
+from three sources: the participant itself, other participants, and
+the controller. The source matters, because a participant's statement
+about itself is not the same as another participant's observation of
+it.
 
 | Member | Set by | Value |
 |---|---|---|
 | `kind` | The participant | `human`, `agent`, `tool`, `transformer`, `recorder`, or `gateway` |
-| `detected_kind` | Other participants | List of `{"kind", "by", "how"}`; `by` is the observing participant, `how` is `stated` (the subject said so) or `inferred` |
-| `observed_consent` | Other participants | List of `{"recording", "processing", "by", "how"}`, for a participant that cannot declare its own, such as a person on a call |
 | `acts_for` | The participant | Opaque pseudonym of its principal |
 | `commit_scope` | The participant | RAR `authorization_details` {{RFC9396}}: what it may commit to |
-| `assurance` | Other participants | List of `{"level", "by", "method", "at"}` |
-| `access` | Controller | `{"send": [...], "receive": [...]}`, naming modalities or flows |
 | `consent` | The participant | `{"recording": s, "processing": s}`; s is `granted`, `refused`, or `withdrawn` |
 | `posture` | The participant | `cooperative` or `adversarial` ({{posture}}) |
+| `detected_kind` | Other participants | List of `{"kind", "by", "how"}`; `by` is the observing participant, `how` is `stated` (the subject said so) or `inferred` |
+| `observed_consent` | Other participants | List of `{"recording", "processing", "by", "how"}`, for a participant that cannot declare its own, such as a person on a call |
+| `assurance` | Other participants | List of `{"level", "by", "method", "at"}` |
+| `access` | Controller | `{"send": [...], "receive": [...]}`, naming modalities or flows |
 | `declaration_ref` | Controller | `message_id` of the DECLARE whose values were committed |
-| `sponsor` | Controller | Participant that sponsored this participant's admission |
+| `sponsor` | Controller | Participant that sponsored this participant's admission ({{sponsored-admission}}) |
 {: #table-descriptors title="Participant Descriptors"}
 
-Members set by the participant come from its latest DECLARE
-({{declare}}). The controller copies them verbatim and names that
-DECLARE in `declaration_ref`, so that any participant can check them
-against the DECLARE the sender published, which is authenticated by the sender's key-bound presentation
-({{key-binding}}). A controller MUST NOT alter them. A participant
-that finds a mismatch MUST disregard the controller's copy.
+Declared members:
+: The controller copies them verbatim from the participant's latest
+  DECLARE and names that DECLARE in `declaration_ref`. Any participant
+  can check the copy against the DECLARE the sender published, which
+  is authenticated by the sender's key-bound presentation
+  ({{key-binding}}). A controller MUST NOT alter them. A participant
+  that finds a mismatch MUST disregard the controller's copy.
 
-`kind` is the participant's own declaration; `detected_kind` is what
-others concluded, attributed to each of them, so that a participant's
-claim to be a person is distinguishable from another participant's
-detection of automation. `assurance` records how strongly a
-participant was authenticated, each entry attributed to the
-participant that established it, so that every participant decides
-for itself whether to rely on it. `level` is `none` (a guest, not
-authenticated), `asserted` (identity claimed but not verified),
-`authenticated`, or `delegated` (authenticated, with verified
-authority from a principal). `method` is a value from the PACE
-Assurance Methods registry ({{iana}}): `credential`, a key-bound
-presentation ({{key-binding}}) of a credential mechanism
-({{identity-formats}}); `cimd`, a key-bound presentation checked
-against a key from an OAuth Client ID Metadata Document {{CIMD}};
-`resumed`, keys pinned in an earlier dialog named in
-`related_dialogs` with relation `resumes`; or `join-code`
-({{joining-codes}}). Other documents register further methods, such
-as those for telephony {{PACE-TEL}}.
+Observed members:
+: Each entry names the participant that made it, in `by`, so that
+  every participant decides for itself whether to rely on it. This is
+  what separates a participant's claim to be a person (`kind`) from
+  another participant's detection of automation (`detected_kind`).
 
-`access` is assigned by the controller and limits what the
-participant may send and receive, such as audio but not screen share.
-It differs from the `supported_modalities` parameter, which states
-what a participant can handle. Absent `access`, a participant may
-send and receive every flow. Relays and dialog hosts enforce it
-({{relay-authorization}}).
+`assurance`:
+: How strongly a participant was authenticated. `level` is `none` (a
+  guest, not authenticated), `asserted` (identity claimed but not
+  verified), `authenticated`, or `delegated` (authenticated, with
+  verified authority from a principal). `method` is a value from the
+  PACE Assurance Methods registry ({{iana}}): `credential`, a
+  key-bound presentation ({{key-binding}}) of a credential mechanism
+  ({{identity-formats}}); `cimd`, a key-bound presentation checked
+  against a key from an OAuth Client ID Metadata Document {{CIMD}};
+  `resumed`, keys pinned in an earlier dialog named in
+  `related_dialogs` with relation `resumes`; or `join-code`
+  ({{joining-codes}}). Other documents register further methods, such
+  as those for telephony {{PACE-TEL}}.
 
-An example entry:
+`access`:
+: What the participant may send and receive, such as audio but not
+  screen share. It differs from the `supported_modalities` parameter,
+  which states what a participant can handle. Absent `access`, a
+  participant may send and receive every flow. Relays and dialog hosts
+  enforce it ({{relay-authorization}}).
+
+An example entry, for a consumer's agent as seen in a dialog with a
+brand's agent:
 
 ~~~json
 {"participant_id": "p-7c1e", "state": "active",
@@ -941,54 +964,87 @@ An example entry:
 
 ### Declarations {#declare}
 
-A participant states its own descriptors ({{participant-descriptors}})
-with DECLARE. Its `declaration` member is an object with any of:
+A participant states its own descriptors, and what it observed about
+others, with DECLARE. DECLARE is a separate operation, rather than a
+field the controller fills in, because the controller may act for the
+other side. A brand's agent that controls a dialog should not be able
+to say that the consumer's agent consented to recording, or that the
+consumer's agent is a person. With DECLARE, the statement comes from
+the participant and is signed by it; the controller only copies it,
+and anyone can check the copy.
 
-* `kind`, `acts_for`, `commit_scope`, `consent`, and `posture`, which
-  replace the sender's previously declared values;
-* `sponsored`: a list of participant identifiers whose admission the
-  sender sponsors ({{sponsored-admission}}); and
-* `observations`: a list of objects, each with `subject` (a
-  participant identifier), one or more of `detected_kind`, `assurance`,
-  and `consent`, and optionally `how` (`stated` or `inferred`), stating
-  what the sender concluded about that participant, or what the
-  participant said when it cannot declare for itself; and
-* `disclosure`: a record that the sender disclosed that it is an AI,
-  with `at` (the time), `to` (the participant identifiers it was made
-  to), and `entry` (the entry reference of the log entry that carried
-  it). It records what the sender said, not that it was understood.
+The `declaration` member of DECLARE is an object with any of these
+members:
 
-The controller commits a DECLARE with UPDATE at the next generation:
-it copies the sender's own values into the sender's entry, sets
-`declaration_ref`, and appends each observation to the subject's
-`detected_kind`, `assurance`, or `observed_consent` with `by` set to
-the sender. An observed consent never replaces a participant's own
-`consent` declaration. The
-controller MUST commit a well-formed DECLARE from an active
-participant without undue delay and MUST NOT refuse a declaration of
+Own descriptors:
+: `kind`, `acts_for`, `commit_scope`, `consent`, and `posture`. Each
+  replaces the sender's previously declared value.
+
+`sponsored`:
+: A list of participant identifiers whose admission the sender
+  sponsors ({{sponsored-admission}}).
+
+`observations`:
+: A list of objects, each with `subject` (a participant identifier),
+  one or more of `detected_kind`, `assurance`, and `consent`, and
+  optionally `how` (`stated` or `inferred`). Each states what the
+  sender concluded about that participant, or what the participant
+  said when it cannot declare for itself, such as a person on a call
+  who agrees to be recorded.
+
+`disclosure`:
+: A record that the sender disclosed that it is an AI, with `at` (the
+  time), `to` (the participant identifiers it was made to), and
+  `entry` (the entry reference of the log entry that carried it). It
+  records what the sender said, not that it was understood.
+
+The controller commits a DECLARE with UPDATE at the next generation.
+In that UPDATE, it:
+
+1. copies the sender's own values into the sender's entry and sets
+   `declaration_ref`; and
+2. appends each observation to the subject's `detected_kind`,
+   `assurance`, or `observed_consent`, with `by` set to the sender. An
+   observed consent never replaces a participant's own `consent`
+   declaration.
+
+The controller MUST commit a well-formed DECLARE from an active
+participant without undue delay. It MUST NOT refuse a declaration of
 `kind`, a raise of `posture`, or a `consent` value of `refused` or
-`withdrawn`. These changes are therefore not subject to the
-controller's agreement, which matters when the controller acts for an
-adversary. A controller MAY refuse other declarations with ERROR
+`withdrawn`. A participant must be able to say what it is, to become
+more cautious, and to refuse recording, without the agreement of a
+controller that may act for its adversary. A controller MAY refuse other declarations with ERROR
 `policy-rejected`.
 
 ### Posture {#posture}
 
-A participant declares its posture with DECLARE. The dialog's
-effective posture is `adversarial` if any active participant declares
-it, and `cooperative` otherwise. Each participant decides from its
-own policy what posture means for it, such as whether a routine
-exchange may proceed without a per-action approval. A counterpart's
-declaration of `cooperative` MUST NOT lower the assurance, approvals,
-or records that a participant's policy requires.
+Many agent dialogs are between parties whose interests differ: a
+buyer's agent and a seller's agent, or a customer's agent and a
+support agent handling a dispute. In such a dialog, an agent should
+not share everything it knows about its principal, and should not rely
+on the other side's statements without checking them. Posture lets a
+participant say which kind of dialog it considers this to be, so that
+every participant applies the matching policy and knows that the
+others have been told. Posture describes incentives, not hostility.
+
+A participant declares its posture with DECLARE:
+
+* The dialog's effective posture is `adversarial` if any active
+  participant declares it, and `cooperative` otherwise.
+* Each participant decides from its own policy what posture means for
+  it, such as whether a routine exchange may proceed without a
+  per-action approval.
+* A counterpart's declaration of `cooperative` MUST NOT lower the
+  assurance, approvals, or records that a participant's policy
+  requires.
 
 A participant can raise its posture at any point, for example when an
 order-status inquiry turns into a refund dispute. The controller
-commits the change like any declaration, so every participant learns
-of it. Context shared before the change stays shared; after it,
-participants SHOULD stop sharing context they would not give an
-adversary, and each applies its adversarial policy to later
-exchanges.
+commits the change like any declaration and cannot refuse it
+({{declare}}), so every participant learns of it. Context shared
+before the change stays shared; after it, participants SHOULD stop
+sharing context they would not give an adversary, and each applies its
+adversarial policy to later exchanges.
 
 ### Guests and Assurance Upgrade {#guests}
 
