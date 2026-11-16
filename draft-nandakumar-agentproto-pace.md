@@ -59,6 +59,16 @@ normative:
 
 informative:
   ARCH: I-D.manyfolks-agentproto-arch
+  ABCA: I-D.ietf-oauth-attestation-based-client-auth
+  DPOP-HTTPSIG:
+    title: "Covering Request Content in DPoP with HTTP Message Signatures"
+    date: 2026-11
+    author:
+    - ins: S. Nandakumar
+    - ins: C. Jennings
+    seriesinfo:
+      Internet-Draft: draft-nandakumar-oauth-dpop-httpsig-00
+    target: https://datatracker.ietf.org/doc/draft-nandakumar-oauth-dpop-httpsig/
   QMUX: I-D.ietf-quic-qmux
   WIMSE-CREDS: I-D.ietf-wimse-workload-creds
   WIMSE-WPT: I-D.ietf-wimse-wpt
@@ -3134,6 +3144,22 @@ or its controller is reachable.
 Controller takeover ({{controller-transfer}}) lets the alternate
 change the participant set. Participants accept it only from the
 designated alternate with verified credentials.
+
+Key-bound presentations ({{key-binding}}) are only as strong as the
+participant's key. A participant SHOULD keep the private keys it uses
+for presentations and message binding in non-exportable storage, and
+SHOULD use a new key for each delegation it receives, so that a key
+taken in one dialog cannot be used in another. An issuer that needs
+assurance that a key cannot be exported can require it to be attested,
+for example with the combined DPoP mode of {{ABCA}}. A verifier of
+presentations used for resumption or for approvals SHOULD supply a
+nonce, so that a party with brief use of a key cannot prepare
+presentations in advance. A participant that acts on an HTTP resource
+with a DPoP-bound token covers the request content as described in
+{{DPOP-HTTPSIG}}. None of this helps when the participant itself is
+compromised and signs what an attacker asks; the limits of its
+delegation and the approval of individual actions {{PACE-AUTHZ}} bound
+what it can then do.
 
 Threats specific to delegation and action approval, such as approval
 spoofing by an intermediate agent and confused deputies, are
