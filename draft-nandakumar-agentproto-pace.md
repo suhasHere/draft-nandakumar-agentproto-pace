@@ -375,6 +375,11 @@ Principal:
   it; in a credential, the principal is the subject, not the agent
   presenting it ({{identity-discovery}}).
 
+Invitee:
+: A participant in state `invited`: named in OPEN, or added by UPDATE,
+  that has not yet answered with ACCEPT or REJECT
+  ({{participant-states}}).
+
 Controller:
 : The participant named by `controller_id` in the dialog context:
   initially the participant that opened the dialog, later an alternate
