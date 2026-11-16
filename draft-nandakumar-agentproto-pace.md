@@ -54,12 +54,12 @@ normative:
   RFC2119:
   RFC8174:
   RFC9000:
-  RFC8446:
+  RFC9846:
   RFC8259:
   RFC9562:
   MoQ-TRANSPORT:
     title: "Media over QUIC Transport"
-    date: 2026-10
+    date: 2026-11
     author:
     - ins: S. Nandakumar
     - ins: V. Vasiliev
@@ -68,7 +68,7 @@ normative:
     - ins: A. Frindell
       role: editor
     seriesinfo:
-      Internet-Draft: draft-ietf-moq-transport-22
+      Internet-Draft: draft-ietf-moq-transport-23
     target: https://datatracker.ietf.org/doc/draft-ietf-moq-transport/
 
 informative:
@@ -157,14 +157,14 @@ informative:
     target: https://arxiv.org/abs/2308.08155
   MoQ-C4M:
     title: "Authorization scheme for MOQT using Common Access Tokens"
-    date: 2026
+    date: 2026-11
     author:
     - ins: W. Law
     - ins: C. Lemmons
     - ins: G. Simon
     - ins: S. Nandakumar
     seriesinfo:
-      Internet-Draft: draft-ietf-moq-c4m-01
+      Internet-Draft: draft-ietf-moq-c4m-02
     target: https://datatracker.ietf.org/doc/draft-ietf-moq-c4m/
   MCP-MOQT: I-D.jennings-agentproto-mcp-over-moqt
   RFC9396:
@@ -940,7 +940,8 @@ brand's agent:
  "kind": "agent", "acts_for": "u-4f9a",
  "detected_kind": [{"kind": "agent", "by": "brand-agent"}],
  "assurance": [{"level": "delegated", "by": "brand-agent",
-                "method": "credential", "at": "2026-11-13T10:02:11Z"}],
+                "method": "credential",
+                "at": "2026-11-13T10:02:11Z"}],
  "posture": "adversarial",
  "declaration_ref": "9b2f6c1e-0d4a-4e8b-a7c3-5f1d2e3a4b6c"}
 ~~~
@@ -2521,7 +2522,7 @@ MOQT SETUP, which is hop by hop ({{moqt-setup-extensions}}).
 | GNAP | | Fine-grained, continuous grants | {{RFC9635}} |
 | WIMSE workload credentials | Workload identity | With deployment policy | {{WIMSE-CREDS}} |
 | WIMSE Workload Proof Token with message binding | Proof of possession bound to the control message | Binds the tokens presented with it | {{WIMSE-WPT}}, {{WPT-MSG}} |
-| mTLS client certificate | Infrastructure-anchored identity | With deployment policy | {{RFC8446}} |
+| mTLS client certificate | Infrastructure-anchored identity | With deployment policy | {{RFC9846}} |
 | OAuth Client ID Metadata Document | Agent keys published at its own HTTPS `client_id` URL | With deployment policy | {{CIMD}} |
 | Common Access Token (CAT) | | Relay-level namespace authorization | {{MoQ-C4M}} |
 
