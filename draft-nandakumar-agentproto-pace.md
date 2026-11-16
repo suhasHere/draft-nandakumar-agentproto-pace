@@ -2643,6 +2643,20 @@ another message does not verify.
 
 #### PACE Presentation JWT {#presentation-jwt}
 
+Some credentials are bound to a key but have no proof that a PACE peer
+can check. A DPoP proof {{RFC9449}} covers an HTTP request, not a
+control message. An mTLS client certificate is proven in the TLS
+handshake, which ends at the first relay. A JWT with a `cnf` claim, or
+a key published in a Client ID Metadata Document, has no presentation
+of its own. Without a proof, a peer cannot tell the credential's
+holder from anyone who copied it.
+
+A participant that presents such a credential therefore sends a PACE
+presentation JWT with it, in the same `credentials` member, in each
+control message that carries the credential. A participant whose
+credential has its own presentation, a Workload Proof Token or a Key
+Binding JWT, uses that instead.
+
 A PACE presentation JWT is a JWT {{RFC7519}}, signed with JWS
 {{RFC7515}} by the private key that the credential it accompanies
 confirms. Its `alg` MUST be an asymmetric digital signature algorithm,
