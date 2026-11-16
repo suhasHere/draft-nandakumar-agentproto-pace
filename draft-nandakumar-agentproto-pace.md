@@ -37,6 +37,10 @@ author:
     email: "fluffy@cisco.com"
 
 normative:
+  RFC6234:
+  RFC7515:
+  RFC7519:
+  RFC7800:
   RFC8785:
   WPT-MSG:
     title: "Workload Proof Tokens for Message-Oriented Protocols"
@@ -84,7 +88,6 @@ informative:
       Internet-Draft: draft-nandakumar-wimse-delegator-bound-chains-00
     target: https://datatracker.ietf.org/doc/draft-nandakumar-wimse-delegator-bound-chains/
   OAUTH-2.1: I-D.ietf-oauth-v2-1
-  RFC7519:
   RFC8693:
   RFC9635:
   WEBTRANS-H3: I-D.ietf-webtrans-http3
@@ -2603,12 +2606,33 @@ control message ({{control-encoding}}), and the peer's next control
 message carries, in its `credentials` member, a presentation bound to
 that nonce, with the verifier's agent-id as audience.
 
-With WIMSE workload credentials, the presentation is a Workload Proof
-Token {{WIMSE-WPT}} carried in the message as {{WPT-MSG}} describes:
-its `nonce` claim echoes the verifier's `nonce`, its `aud` is the
-verifier's agent-id, and its `mth` claim binds it to the control
-message that carries it, under the `pace` canonicalization profile.
-An SD-JWT or SD-Card Key Binding JWT can carry the same `mth` claim.
+A presentation also binds the control message that carries it, so
+that a copy of it in another message does not verify. It does so with
+the `mth` claim of {{WPT-MSG}}, computed under the `pace`
+canonicalization profile below. The presentation takes the form that
+the credential mechanism provides:
+
+WIMSE workload credentials:
+: A Workload Proof Token {{WIMSE-WPT}}, carried in the message as
+  {{WPT-MSG}} describes. Its `nonce` claim echoes the verifier's
+  `nonce`, its `aud` is the verifier's agent-id, and its `mth` claim
+  binds the message.
+
+SD-JWT and SD-Card:
+: The Key Binding JWT, with `nonce` and `aud` as above and `mth` as an
+  additional claim.
+
+Other credentials bound to a key:
+: A PACE presentation JWT ({{presentation-jwt}}). This covers
+  credentials whose key a `cnf` claim {{RFC7800}} confirms, such as a
+  DPoP-bound access token or a JWT; keys published in a Client ID
+  Metadata Document {{CIMD}}; and the key of an mTLS client
+  certificate, which cannot be proven to a peer over TLS because
+  relays terminate it.
+
+A credential bound to no key, such as a bearer token, cannot be bound
+to a presentation. A verifier relies on it only as far as its
+credential mechanism and the deployment's policy allow.
 
 The `pace` profile applies the `json-jcs` profile of {{WPT-MSG}} to a
 PACE control message, with `credentials` as the credential member: the
@@ -2616,6 +2640,35 @@ PACE control message, with `credentials` as the credential member: the
 message with its `credentials` member removed. A presentation can
 therefore travel inside the message it binds, and a copy of it in
 another message does not verify.
+
+#### PACE Presentation JWT {#presentation-jwt}
+
+A PACE presentation JWT is a JWT {{RFC7519}}, signed with JWS
+{{RFC7515}} by the private key that the credential it accompanies
+confirms. Its `alg` MUST be an asymmetric digital signature algorithm,
+and MUST NOT be `none` or a MAC algorithm. Its JOSE header carries:
+
+* `typ`: REQUIRED. `pace-presentation+jwt`.
+* `jwk` or `x5c`: The public key as a JWK when the credential
+  confirms only a key thumbprint, or the certificate chain for an
+  mTLS client certificate. Omitted when the credential carries the key
+  itself.
+
+Its claims are:
+
+* `aud`: REQUIRED. The verifier's agent-id.
+* `nonce`: REQUIRED. The verifier's `nonce`.
+* `iat` and `jti`: REQUIRED.
+* `ath`: REQUIRED. The base64url-encoded SHA-256 hash {{RFC6234}} of
+  the ASCII encoding of the credential it accompanies.
+* `mth`: REQUIRED. The message hash of {{WPT-MSG}}, under the `pace`
+  profile.
+
+The verifier checks the signature with the key that the credential
+confirms, after checking a `jwk` or `x5c` against the credential's
+thumbprint or certificate; and checks `typ`, `aud`, `nonce`, `ath`,
+and `mth`. It rejects a presentation whose `jti` it has already
+accepted in the dialog.
 
 When a dialog opens ({{opening}}), OPEN carries the controller's
 nonce, ACCEPT carries the invitee's bound presentation and its own
@@ -3399,6 +3452,30 @@ This document also asks IANA to register the following entry in the
 * Description: JCS of a PACE control message with its `credentials`
   member removed
 * Reference: {{key-binding}}
+
+This document also asks IANA to register `application/pace-presentation+jwt`
+in the "Media Types" registry, for the `typ` header of PACE
+presentation JWTs:
+
+* Type name: application
+* Subtype name: pace-presentation+jwt
+* Required parameters: n/a
+* Optional parameters: n/a
+* Encoding considerations: binary; a PACE presentation JWT is a JWT, a
+  sequence of base64url-encoded values separated by period characters
+* Security considerations: {{key-binding}} of this document
+* Interoperability considerations: n/a
+* Published specification: this document
+* Applications that use this media type: PACE participants
+* Fragment identifier considerations: n/a
+* Additional information: Magic number(s): n/a; File extension(s):
+  n/a; Macintosh file type code(s): n/a
+* Person and email address to contact for further information: Suhas
+  Nandakumar, snandaku@cisco.com
+* Intended usage: COMMON
+* Restrictions on usage: none
+* Author: Suhas Nandakumar, snandaku@cisco.com
+* Change controller: IETF
 
 TODO: registries for control operations, ERROR reasons, and dialog
 parameters.
