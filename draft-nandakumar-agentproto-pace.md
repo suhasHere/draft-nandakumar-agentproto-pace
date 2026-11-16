@@ -1588,9 +1588,11 @@ Control messages also carry the following type-specific members:
 
 * `context`: The complete dialog context, encoded as the JSON object
   defined in {{dialog-context}}.
-* `in_reply_to`: The `message_id` of the OPEN or UPDATE being accepted
-  or rejected, of the CANCEL being acknowledged, of the STATE_REQUEST
-  being answered, or of the control message an ERROR rejects.
+* `in_reply_to`: The `message_id` of the control message this message
+  answers: the OPEN, UPDATE, or SEGMENT that an ACCEPT or REJECT
+  answers; the STATE_REQUEST or LOG_STATUS that a STATE or LOG_STATUS
+  answers; the CANCEL that a CANCEL_ACK answers; or the message that
+  an ERROR rejects.
 * `target_id`: The participant identifier whose propagation relationship
   is revoked.
 * `declaration`: The sender's declaration ({{declare}}).
