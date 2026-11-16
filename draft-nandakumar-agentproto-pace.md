@@ -394,6 +394,13 @@ Intermediary:
   intermediary, and so is a gateway that transforms one modality into
   another.
 
+Dialog host:
+: An intermediary that keeps a dialog's control messages and delivers
+  them to its participants, in a binding where participants do not
+  exchange them directly, such as a binding over HTTP. Unlike a relay,
+  which forwards messages as they arrive, a dialog host stores them and
+  serves them on request. A participant can also be the dialog host.
+
 Propagation relationship:
 : The authorization and forwarding relationship that allows a
   participant or intermediary to receive or forward a dialog's
