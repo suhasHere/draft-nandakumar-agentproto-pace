@@ -1041,7 +1041,7 @@ A participant declares its posture with DECLARE:
   participant declares it, and `cooperative` otherwise.
 * Each participant decides from its own policy what posture means for
   it, such as whether a routine exchange may proceed without a
-  per-action approval ({{PACE-AUTHZ}}).
+  per-action approval ({{delegation-approval}}).
 * A counterpart's declaration of `cooperative` MUST NOT lower the
   assurance, approvals, or records that a participant's policy
   requires.
@@ -1276,7 +1276,7 @@ CANCEL_ACK MAY also carry `compensation`, an object with a
 `description` and an opaque `reference`, for what the receiver offers
 in place of an action it could not reverse, such as a refund or a
 credit. The terms under which work can be cancelled before it commits
-are stated in a commitment {{PACE-AUTHZ}}.
+are stated in a commitment ({{delegation-approval}}).
 
 When CANCEL reaches delegated dialogs (scope `subtree` or `dialog`), a
 receiver that controls such dialogs sends its own CANCEL_ACK only
@@ -1349,7 +1349,7 @@ dialog's outcome:
 * `parts`: OPTIONAL. For `partial`, the outcome of each part, and
   whether a part that took effect can be compensated.
 * `sources` and `commitments`: OPTIONAL. Identifiers of attested
-  assertions and commitments {{PACE-AUTHZ}} on which the result rests,
+  assertions and commitments ({{delegation-approval}}) on which the result rests,
   so that each fact keeps its source.
 
 `result` is the sender's statement. It does not change the dialog
@@ -1903,8 +1903,8 @@ carry dialog content and are outside the dialog context. In the terms
 of {{Section 4.2.11 of ARCH}}, `chat`, `audio`, and `video` carry
 response output, operation and protocol binding tracks carry
 information output, and `progress` carries progress output. Extensions
-define further tracks, such as the `checkpoint` track of
-{{PACE-AUTHZ}}.
+define further tracks, such as the `checkpoint` track of PACE
+Authorization ({{delegation-approval}}).
 
 Protocol bindings extend the dialog namespace with additional
 namespace fields, so that multiple protocols can operate concurrently
@@ -2397,7 +2397,7 @@ subscriber priority:
 | Priority Range | Category | Use |
 |----------------|----------|-----|
 | 0-15 | Dialog Control | All control messages on the `ctrl` track, including CANCEL, ERROR, and REVOKE |
-| 16-31 | Urgent Signals | Signals that must preempt content, such as authorization checkpoints {{PACE-AUTHZ}} or a request for a human |
+| 16-31 | Urgent Signals | Signals that must preempt content, such as authorization checkpoints ({{delegation-approval}}) or a request for a human |
 | 32-63 | Real-time Media | Voice/video frames |
 | 64-95 | Interactive | Chat messages, streaming LLM tokens |
 | 96-127 | Standard Operations | Tool calls, request/response |
@@ -2580,7 +2580,7 @@ delegated dialog, how authority narrows at each hop, which credential
 formats suit which deployments, how cycles are rejected (with ERROR
 `delegation-cycle`), and how revocation of a delegation terminates the
 dialogs that depend on it are specified in PACE Authorization
-{{PACE-AUTHZ}}.
+({{delegation-approval}}).
 
 ### Selective Disclosure {#selective-disclosure}
 
@@ -2609,26 +2609,30 @@ that nonce, with the verifier's agent-id as audience.
 A presentation also binds the control message that carries it, so
 that a copy of it in another message does not verify. It does so with
 the `mth` claim of {{WPT-MSG}}, computed under the `pace`
-canonicalization profile below. The presentation takes the form that
-the credential mechanism provides:
+canonicalization profile below. Each presentation carries `nonce`
+(the verifier's nonce), `aud` (the verifier's agent-id), and `mth`.
+PACE supports three presentation types, one for each kind of
+credential, and a verifier tells them apart by the JOSE `typ` header:
 
-WIMSE workload credentials:
-: A Workload Proof Token {{WIMSE-WPT}}, carried in the message as
-  {{WPT-MSG}} describes. Its `nonce` claim echoes the verifier's
-  `nonce`, its `aud` is the verifier's agent-id, and its `mth` claim
-  binds the message.
+| Presentation type | `typ` | Used with |
+|---|---|---|
+| Workload Proof Token {{WIMSE-WPT}} | `wpt+jwt` | WIMSE workload credentials |
+| Key Binding JWT {{RFC9901}} | `kb+jwt` | SD-JWT and SD-Card credentials |
+| PACE presentation JWT ({{presentation-jwt}}) | `pace-presentation+jwt` | Other credentials bound to a key |
+{: #table-presentations title="Presentation Types"}
 
-SD-JWT and SD-Card:
-: The Key Binding JWT, with `nonce` and `aud` as above and `mth` as an
-  additional claim.
+A Workload Proof Token is carried in the message as {{WPT-MSG}}
+describes; a Key Binding JWT carries `mth` as an additional claim. The
+PACE presentation JWT covers credentials whose key a `cnf` claim
+{{RFC7800}} confirms, such as a DPoP-bound access token or a JWT; keys
+published in a Client ID Metadata Document {{CIMD}}; and the key of an
+mTLS client certificate, which cannot be proven to a peer over TLS
+because relays terminate it.
 
-Other credentials bound to a key:
-: A PACE presentation JWT ({{presentation-jwt}}). This covers
-  credentials whose key a `cnf` claim {{RFC7800}} confirms, such as a
-  DPoP-bound access token or a JWT; keys published in a Client ID
-  Metadata Document {{CIMD}}; and the key of an mTLS client
-  certificate, which cannot be proven to a peer over TLS because
-  relays terminate it.
+A participant that verifies key-bound presentations MUST support the
+PACE presentation JWT, which works with any credential bound to a key.
+It supports the other types as the credential mechanisms of its
+deployment require ({{identity-formats}}).
 
 A credential bound to no key, such as a bearer token, cannot be bound
 to a presentation. A verifier relies on it only as far as its
@@ -2716,7 +2720,7 @@ be attributable end to end, with records that parties other than the
 operator can check, adds an evidence mechanism of its choice; PACE
 does not mandate one and its messages are unchanged by it. What such a
 mechanism records for delegations and approvals is described in
-{{PACE-AUTHZ}}; TRAIL {{TRAIL}} is one example of such a mechanism.
+PACE Authorization ({{delegation-approval}}); TRAIL {{TRAIL}} is one example of such a mechanism.
 
 ## Agent Discovery {#agent-discovery}
 
@@ -3192,7 +3196,7 @@ its propagation relationship through REVOKE ({{lifecycle}}), and the
 revoked agent terminates the dialogs it delegated under it
 ({{lifecycle-propagation}}).
 
-### Delegation and Action Approval
+### Delegation and Action Approval {#delegation-approval}
 
 PACE Authorization {{PACE-AUTHZ}} specifies the authority agents
 exercise in PACE dialogs: delegation credentials bound to the
@@ -3222,7 +3226,7 @@ confidential and integrity-protected from relays, participants protect
 object payloads with End-to-End Secure Objects {{MOQ-SECURE-OBJECTS}}.
 A deployment that does not trust its relays with content MUST protect
 every content track this way, and SHOULD protect `ctrl` objects,
-and those of extension tracks such as `checkpoint` {{PACE-AUTHZ}},
+and those of extension tracks such as `checkpoint` ({{delegation-approval}}),
 too; relays do not need to read any PACE payload
 ({{relay-authorization}}).
 
@@ -3389,7 +3393,7 @@ authentication, not on `kind`.
 
 `result` and `contact_limits` are statements by their sender, not
 evidence; a participant relies on the assertions and commitments they
-cite {{PACE-AUTHZ}}. A join code is a bearer secret for the short time
+cite, as PACE Authorization describes ({{delegation-approval}}). A join code is a bearer secret for the short time
 it is valid: it is single use, rate limited, and admits the redeemer
 only as the sponsored participant of the party it was issued to.
 
@@ -3425,7 +3429,7 @@ designated alternate with verified credentials.
 
 Threats specific to delegation and action approval, such as approval
 spoofing by an intermediate agent and confused deputies, are
-addressed in {{PACE-AUTHZ}}.
+addressed in PACE Authorization ({{delegation-approval}}).
 
 TODO: further considerations.
 
