@@ -43,7 +43,7 @@ normative:
   RFC7800:
   RFC8785:
   WPT-MSG:
-    title: "Workload Proof Tokens for Message-Oriented Protocols"
+    title: "Message Binding for Workload Proof Tokens"
     date: 2026-11
     author:
     - ins: S. Nandakumar
