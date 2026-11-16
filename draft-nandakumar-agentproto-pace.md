@@ -37,6 +37,16 @@ author:
     email: "fluffy@cisco.com"
 
 normative:
+  RFC8785:
+  WPT-MSG:
+    title: "Workload Proof Tokens for Message-Oriented Protocols"
+    date: 2026-11
+    author:
+    - ins: S. Nandakumar
+    - ins: C. Jennings
+    seriesinfo:
+      Internet-Draft: draft-nandakumar-wimse-wpt-message-binding-00
+    target: https://datatracker.ietf.org/doc/draft-nandakumar-wimse-wpt-message-binding/
   RFC2119:
   RFC8174:
   RFC9000:
@@ -62,15 +72,6 @@ informative:
   QMUX: I-D.ietf-quic-qmux
   WIMSE-CREDS: I-D.ietf-wimse-workload-creds
   WIMSE-WPT: I-D.ietf-wimse-wpt
-  WPT-MSG:
-    title: "Workload Proof Tokens for Message-Oriented Protocols"
-    date: 2026-11
-    author:
-    - ins: S. Nandakumar
-    - ins: C. Jennings
-    seriesinfo:
-      Internet-Draft: draft-nandakumar-wimse-wpt-message-binding-00
-    target: https://datatracker.ietf.org/doc/draft-nandakumar-wimse-wpt-message-binding/
   ACTOR-PROFILE: I-D.mcguinness-oauth-actor-profile
   DELEGATION-TOKENS: I-D.asor-wimse-agent-delegation-chain
   AGENT-DELEGATION:
@@ -249,7 +250,8 @@ combine text, audio, video, and request/response exchanges in
 point-to-point, point-to-multipoint, and multi-party topologies.
 Application-layer agent protocols such as A2A, MCP, and AutoGen keep
 their own message formats and carry the dialog context through
-their own extension points.
+their own extension points. Delegation between agents and approval of
+individual agent actions are specified in a companion document.
 
 --- middle
 
@@ -342,6 +344,9 @@ PACE addresses the following goals.
 PACE does not define trust frameworks,
 authorization protocols, or audit data structures; deployments use
 existing mechanisms, and auditing systems can use dialog identifiers.
+The authority agents exercise in a dialog, delegating work and
+approving single actions, is specified in PACE Authorization
+{{PACE-AUTHZ}}.
 Dialog content, model behavior, planning, and task semantics are also
 out of scope.
 
@@ -1033,7 +1038,7 @@ A participant declares its posture with DECLARE:
   participant declares it, and `cooperative` otherwise.
 * Each participant decides from its own policy what posture means for
   it, such as whether a routine exchange may proceed without a
-  per-action approval.
+  per-action approval ({{PACE-AUTHZ}}).
 * A counterpart's declaration of `cooperative` MUST NOT lower the
   assurance, approvals, or records that a participant's policy
   requires.
@@ -2602,9 +2607,15 @@ With WIMSE workload credentials, the presentation is a Workload Proof
 Token {{WIMSE-WPT}} carried in the message as {{WPT-MSG}} describes:
 its `nonce` claim echoes the verifier's `nonce`, its `aud` is the
 verifier's agent-id, and its `mth` claim binds it to the control
-message that carries it, under the PACE canonicalization profile of
-{{PACE-AUTHZ}}. An SD-JWT or SD-Card Key Binding JWT can carry the
-same `mth` claim.
+message that carries it, under the `pace` canonicalization profile.
+An SD-JWT or SD-Card Key Binding JWT can carry the same `mth` claim.
+
+The `pace` profile applies the `json-jcs` profile of {{WPT-MSG}} to a
+PACE control message, with `credentials` as the credential member: the
+`mth` hash is computed over the JCS {{RFC8785}} form of the control
+message with its `credentials` member removed. A presentation can
+therefore travel inside the message it binds, and a copy of it in
+another message does not verify.
 
 When a dialog opens ({{opening}}), OPEN carries the controller's
 nonce, ACCEPT carries the invitee's bound presentation and its own
@@ -3380,6 +3391,14 @@ This document also asks IANA to register the following entry in the
 | Type | Name | Specification |
 |-----:|:-----|:--------------|
 | 0x50414301 | pace-version | {{moqt-setup-extensions}} |
+
+This document also asks IANA to register the following entry in the
+"WIMSE Message Canonicalization Profiles" registry of {{WPT-MSG}}:
+
+* Profile Name: `pace`
+* Description: JCS of a PACE control message with its `credentials`
+  member removed
+* Reference: {{key-binding}}
 
 TODO: registries for control operations, ERROR reasons, and dialog
 parameters.
