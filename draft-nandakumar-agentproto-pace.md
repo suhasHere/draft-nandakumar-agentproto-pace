@@ -1135,30 +1135,76 @@ how the dialog is conducted and are not part of the dialog context:
 * `purpose`: On OPEN and JOIN_REQUEST, a short statement of why the
   sender opens or joins the dialog, such as a delivery update or a
   notetaker for a meeting
-* `basis`: On OPEN and JOIN_REQUEST, the basis on which the sender
-  makes contact, from the PACE Contact Basis registry ({{iana}}):
-  `subscription`, `existing-relationship`, `contract`,
-  `legal-obligation`, `consent`, or `none`
+* `basis`: On OPEN and JOIN_REQUEST, why the sender considers itself
+  entitled to make contact, from the PACE Contact Basis registry
+  ({{contact-basis}})
 
-`purpose` and `basis` let an invitee or controller decide whether to
-accept a contact before any content is exchanged, and refuse it with a
-reason ({{results}}). They are the sender's assertions; a recipient
-that relies on `basis` checks it against its own records, such as a
-follow-up subscription it created.
+Parameters are negotiated by proposal and acceptance:
 
-Parameters follow an offer/answer model. The controller offers values
-in OPEN, or in UPDATE for a change, and each invitee or participant
-answers in ACCEPT with the values it supports. For list-valued
-parameters, such as `supported_modalities` and `supported_protocols`,
-the answer MUST be a subset of the offer, and the active set for a
-participant is that answer; an empty answer for `supported_modalities`
-is a rejection. For scalar parameters, the answer MAY lower a limit
-(`max_participants`, `idle_timeout`, `liveness_interval`) but MUST NOT
-raise it; `log_retention` is a minimum, so the answer MAY raise it but
-MUST NOT lower it. `purpose` and `basis` are not negotiated. The controller's committing UPDATE carries the resulting
-values in `parameters`, and those values are in effect from that
-generation. A participant that cannot accept an offer answers with
-REJECT.
+* The controller proposes values in OPEN, or in UPDATE for a change.
+* Each invitee or participant accepts with ACCEPT, stating the values
+  it supports. A participant that cannot accept a proposal sends
+  REJECT.
+* For list-valued parameters, such as `supported_modalities` and
+  `supported_protocols`, the accepted values MUST be a subset of the
+  proposed ones, and they are the participant's active set. Accepting
+  no value of `supported_modalities` is a rejection.
+* For scalar parameters, the accepted value MAY lower a limit
+  (`max_participants`, `idle_timeout`, `liveness_interval`) but MUST
+  NOT raise it. `log_retention` is a minimum, so the accepted value
+  MAY raise it but MUST NOT lower it.
+* `purpose` and `basis` are not negotiated.
+* The controller's committing UPDATE carries the resulting values in
+  `parameters`, and those values are in effect from that generation.
+
+### Contact Purpose and Basis {#contact-basis}
+
+An agent can open a dialog with a party that did not ask for it, such
+as a person's agent or an organization's inbox. The recipient needs to
+decide whether to engage before any content is exchanged, as a person
+screens a call or an email {{DIALOG-UC}}. `purpose` says what the
+contact is about, and `basis` says why the sender considers itself
+entitled to make it. With `contact_limits` ({{results}}), they let a
+recipient refuse a contact, say why, and limit later ones.
+
+`basis` takes one of these values:
+
+`subscription`:
+: The recipient asked for contacts of this kind, such as updates on an
+  order or a delivery.
+
+`existing-relationship`:
+: The sender and the recipient's principal have an ongoing
+  relationship, such as a customer account, and the contact concerns
+  it.
+
+`contract`:
+: The contact is needed to carry out an agreement to which the
+  recipient's principal is a party, such as arranging the delivery of
+  something it bought.
+
+`legal-obligation`:
+: Law or regulation requires the sender to make the contact, such as a
+  product safety recall.
+
+`consent`:
+: The recipient's principal agreed to contacts of this kind from this
+  sender, outside any subscription.
+
+`none`:
+: The sender claims no basis: the contact is unsolicited, and says so.
+
+`purpose` and `basis` are the sender's assertions, and the recipient
+checks them. A recipient can check `subscription`, and often
+`existing-relationship` and `consent`, against its own records. It
+cannot in general check `contract` or `legal-obligation`; it records
+them and weighs them with the sender's `assurance`
+({{participant-descriptors}}). A recipient can refuse a contact whose
+basis it cannot confirm, or that states no `purpose` or `basis`, with
+REJECT and a `result` reason such as `unwanted-contact` or
+`no-stated-purpose` ({{results}}). The values describe the sender's
+reason for making contact; they are not claims of a legal basis for
+processing personal data under any jurisdiction.
 
 ### Dialog Lifetime {#dialog-lifetime}
 
@@ -3318,7 +3364,7 @@ PACE Result Reasons ({{results}}), with initial values `policy`,
 `principal-declined`, `agreement-reached`, `no-agreement`,
 `superseded`, and `consent-withdrawn`, each referencing this document.
 
-PACE Contact Basis ({{dialog-parameters}}), with initial values
+PACE Contact Basis ({{contact-basis}}), with initial values
 `subscription`, `existing-relationship`, `contract`,
 `legal-obligation`, `consent`, and `none`, each referencing this
 document.
