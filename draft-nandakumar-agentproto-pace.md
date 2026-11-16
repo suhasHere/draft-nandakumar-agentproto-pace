@@ -72,6 +72,7 @@ normative:
     target: https://datatracker.ietf.org/doc/draft-ietf-moq-transport/
 
 informative:
+  RFC9420:
   ARCH: I-D.manyfolks-agentproto-arch
   QMUX: I-D.ietf-quic-qmux
   WIMSE-CREDS: I-D.ietf-wimse-workload-creds
@@ -91,24 +92,6 @@ informative:
   RFC8693:
   RFC9635:
   WEBTRANS-H3: I-D.ietf-webtrans-http3
-  PACE-HTTP:
-    title: "PACE over HTTP: Agent Dialog Management for HTTP Applications"
-    date: 2026-11
-    author:
-    - ins: S. Nandakumar
-    - ins: C. Jennings
-    seriesinfo:
-      Internet-Draft: draft-nandakumar-agentproto-pace-http-00
-    target: https://datatracker.ietf.org/doc/draft-nandakumar-agentproto-pace-http/
-  PACE-OIDC:
-    title: "Using OpenID Connect with Agent Dialogs"
-    date: 2026-11
-    author:
-    - ins: S. Nandakumar
-    - ins: C. Jennings
-    seriesinfo:
-      Internet-Draft: draft-nandakumar-agentproto-oidc-profile-00
-    target: https://datatracker.ietf.org/doc/draft-nandakumar-agentproto-oidc-profile/
   RFC9449:
   RFC9576:
   MOQ-PP: I-D.ietf-moq-privacy-pass-auth
@@ -123,15 +106,6 @@ informative:
     target: https://datatracker.ietf.org/doc/draft-nandakumar-privacypass-delegated-agents/
   RFC9901:
   MOQ-SECURE-OBJECTS: I-D.ietf-moq-secure-objects
-  PACE-MLS:
-    title: "End-to-End Keys for PACE Dialogs Using MLS"
-    date: 2026-11
-    author:
-    - ins: S. Nandakumar
-    - ins: C. Jennings
-    seriesinfo:
-      Internet-Draft: draft-nandakumar-agentproto-pace-mls-00
-    target: https://datatracker.ietf.org/doc/draft-nandakumar-agentproto-pace-mls/
   TRAIL: I-D.nassar-agentproto-trail
   PACE-AUTHZ:
     title: "PACE Authorization: Delegation and Action Approval"
@@ -200,15 +174,6 @@ informative:
     date: 2026-11
     author:
     - ins: F. Siyavud
-  PACE-TEL:
-    title: "PACE for Telephony: Agent Dialogs over SIP and the PSTN"
-    date: 2026-11
-    author:
-    - ins: S. Nandakumar
-    - ins: C. Jennings
-    seriesinfo:
-      Internet-Draft: draft-nandakumar-agentproto-pace-telephony-00
-    target: https://datatracker.ietf.org/doc/draft-nandakumar-agentproto-pace-telephony/
   STIVERS:
     title: "Universals and cultural variation in turn-taking in conversation"
     date: 2009-06
@@ -509,15 +474,13 @@ Request/response mechanisms might not meet these requirements. When a
 dialog's flows share one ordered connection, a cancellation waits
 behind output that has already been sent, and one lost packet stalls
 every flow. Delivery to several participants, and learning about new
-ones, are left to the application. PACE over HTTP {{PACE-HTTP}} binds
-the same dialogs to HTTP/1.1, HTTP/2, and HTTP/3 for agents that cannot
-use MOQT, states which of these requirements each HTTP version meets,
-and moves real-time media to MOQT over WebTransport.
+ones, are left to the application.
 
 ## Why MOQT?
 
-This document specifies a MOQT binding for exchanging dialogs;
-{{PACE-HTTP}} specifies an HTTP binding that interoperates with it. Media
+This document specifies a MOQT binding for exchanging dialogs. Other
+documents can bind the same dialogs to HTTP for agents that cannot use
+MOQT. Media
 over QUIC Transport (MOQT) {{MoQ-TRANSPORT}} is a publish/subscribe
 protocol over QUIC {{RFC9000}}. It meets each requirement in
 {{transport-requirements}} with a transport mechanism, so agent
@@ -947,8 +910,8 @@ Observed members:
   against a key from an OAuth Client ID Metadata Document {{CIMD}};
   `resumed`, keys pinned in an earlier dialog named in
   `related_dialogs` with relation `resumes`; or `join-code`
-  ({{joining-codes}}). Other documents register further methods, such
-  as those for telephony {{PACE-TEL}}.
+  ({{joining-codes}}). Other documents can register further methods,
+  such as those for telephony.
 
 `access`:
 : What the participant may send and receive, such as audio but not
@@ -1096,8 +1059,8 @@ entry with `method` `join-code`, and invalidates the code. A code
 MUST have at least the entropy its lifetime and the controller's rate
 limit on attempts require, and a controller MUST limit attempts per
 dialog. A requester that does not know the dialog-id redeems the code
-at an endpoint that resolves it, as {{PACE-HTTP}} defines. Encodings
-for voice and DTMF are defined in {{PACE-TEL}}.
+at an endpoint that resolves it, such as one that a binding over HTTP
+provides. Other documents can define encodings for voice and DTMF.
 
 ### Revoking a Participant {#revoking-a-participant}
 
@@ -1416,8 +1379,8 @@ segment dialog any participant whose `kind` is `agent` or `recorder`,
 and the segment's participants exchange its content only in the
 segment dialog. Until a participant has acknowledged, it might not know
 that a gap is intended; the controller MAY revoke a participant that
-does not acknowledge, and a dialog host withholds later content from it
-{{PACE-HTTP}}.
+does not acknowledge, and a dialog host withholds later content from
+it.
 
 Because the segment dialog is a delegated dialog of this one, it ends
 when this one ends ({{lifecycle-propagation}}). With end-to-end
@@ -2522,10 +2485,10 @@ workload, or organization on whose behalf the work is done, not the
 agent presenting the credential. The acting agent is identified by
 `client_id` or by the outermost `act`, and the meaning and validation
 of `act` chains follow the OAuth Actor Profile {{ACTOR-PROFILE}}. Other
-formats carry the equivalent information in their own fields. How a
-person's sign-in with OpenID Connect, cross-domain grants, and
-out-of-band approval relate to these credentials is profiled in
-{{PACE-OIDC}}; an ID Token is not a PACE credential. The token format and the trust
+formats carry the equivalent information in their own fields. Other
+documents can profile how a person's sign-in with OpenID Connect,
+cross-domain grants, and out-of-band approval relate to these
+credentials; an ID Token is not a PACE credential. The token format and the trust
 framework are chosen by the deployment.
 
 ### Credential Mechanisms {#identity-formats}
@@ -3231,11 +3194,11 @@ too; relays do not need to read any PACE payload
 ({{relay-authorization}}).
 
 Keys are scoped to a dialog. How they are established and distributed
-to participants is chosen by the deployment; {{PACE-MLS}} specifies
-one way, with an MLS group per dialog whose commits the controller
-carries in its control messages. Where a key establishment mechanism
-requires `ctrl` objects to be readable by participants before they
-join, as {{PACE-MLS}} does, `ctrl` objects are left unencrypted and
+to participants is chosen by the deployment. One way is an MLS {{RFC9420}}
+group per dialog whose commits the controller carries in its control
+messages. Where a key establishment mechanism requires `ctrl` objects
+to be readable by participants before they join, as MLS does,
+`ctrl` objects are left unencrypted and
 remain authenticated by the presentations bound to each message
 ({{key-binding}}). When the controller commits a participant's
 departure or revocation, the keys MUST be rotated so that the
@@ -3299,7 +3262,8 @@ access tokens:
 The relay then learns that a member of the dialog made the request,
 not which member. Participants still identify one another through
 `credentials` in control messages; these tokens hide participants only
-from the relays. {{PACE-HTTP}} applies the same tokens to dialog hosts.
+from the relays. A binding over HTTP can apply the same tokens to
+dialog hosts.
 
 ## Privacy Considerations {#privacy}
 
@@ -3384,7 +3348,7 @@ so each participant weighs them by who made them. The controller can
 still delay commits or refuse admissions other than those this
 document requires it to accept; a participant that relies on a fair
 controller in an adversarial dialog can be the controller itself, or
-use a dialog host that neither party operates {{PACE-HTTP}}.
+use a dialog host that neither party operates.
 
 A participant's `kind`, including `human`, is its own claim. Detection
 of automation by others is recorded separately, and neither is proof.
@@ -3453,8 +3417,8 @@ document.
 
 PACE Assurance Methods ({{participant-descriptors}}), with initial
 values `credential`, `cimd`, `resumed`, and `join-code`, each
-referencing this document. Values for telephony, such as STIR/SHAKEN
-attestation levels, are registered by {{PACE-TEL}}.
+referencing this document. Other documents can register further
+values, such as STIR/SHAKEN attestation levels for telephony.
 
 This document also asks IANA to register the following entry in the
 "Setup Options" registry of {{MoQ-TRANSPORT}}:
