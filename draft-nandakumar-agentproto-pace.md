@@ -2534,7 +2534,7 @@ MOQT SETUP, which is hop by hop ({{moqt-setup-extensions}}).
 | mTLS client certificate | Infrastructure-anchored identity | With deployment policy | {{RFC9846}} |
 | OAuth Client ID Metadata Document | Agent keys published at its own HTTPS `client_id` URL | With deployment policy | {{CIMD}} |
 | Common Access Token (CAT) | | Relay-level namespace authorization | {{MoQ-C4M}} |
-| Key-Bound Identity Assertion (KBIA) | A person's identity, bound by their identity provider to a key on the person's own device | None | {{KBIA}} |
+| Key-Bound Identity Assertion (KBIA) | A person's identity, bound by their identity provider to a key that signs only at the person's direction | None | {{KBIA}} |
 
 WIMSE workload credentials and mTLS need trust anchors configured in
 advance. Agents with no prior relationship, such as a person's agent
@@ -2545,16 +2545,18 @@ key-bound presentation ({{key-binding}}) against those keys. This
 shows that the agent controls the URL's domain, not who operates it
 or whom it acts for.
 
-A person who takes part in a dialog from their own device, such as a
-human participant in a conference with agents, cannot present an ID
-Token, which is a bearer credential meant for one relying party. The
-device presents instead a Key-Bound Identity Assertion {{KBIA}}, which
-its identity provider issued for a key on that device, with a
-key-bound presentation ({{key-binding}}) signed with that key. Other
+A person who takes part in a dialog, such as a human participant in
+a conference with agents, cannot present an ID Token, which is a
+bearer credential meant for one relying party. The person's client,
+such as an app on their phone, presents instead a Key-Bound Identity
+Assertion {{KBIA}}, which their identity provider issued for a key
+that signs only at the person's direction, with a key-bound
+presentation ({{key-binding}}) signed with that key. Other
 participants, in any trust domain that trusts the identity provider,
 learn which person it is; a verifier records `assurance` with method
-`credential`. A KBIA names a person and is issued only to the person's
-own device, never to an agent, so an agent MUST NOT present one, and a
+`credential`. A KBIA names a person and is issued only to clients that
+act at the person's direction, never to an agent, which acts under its
+own credentials and a delegation. An agent MUST NOT present one, and a
 receiver MUST NOT accept one from a participant whose `kind` is not
 `human`.
 
